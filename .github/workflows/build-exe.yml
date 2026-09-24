@@ -1,0 +1,48 @@
+name: Build exe
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Test
+        run: python -m pytest tests
+
+      - name: Build exe (onedir)
+        run: pyinstaller --noconfirm --clean --onedir --windowed --name LogMerger main.py
+
+      # ダウンロードすると LogMerger フォルダ（LogMerger.exe を含む）が入った zip になる
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LogMerger
+          path: dist/
+          if-no-files-found: error
+
+      - name: Zip for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Compress-Archive -Path dist\LogMerger -DestinationPath LogMerger.zip
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LogMerger.zip
