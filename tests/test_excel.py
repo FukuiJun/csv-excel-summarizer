@@ -7,7 +7,7 @@ from helpers import EXPECTED_XLSX, SAMPLE_LOGGER, SAMPLE_UART, write_logger_csv,
 from logger_reader import read_logger_csv
 from make_expected import make
 from merger import build_analysis_table, merge
-from models import SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
+from models import ELAPSED_KEY, SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
 from uart_reader import read_uart_csv
 
 
@@ -83,7 +83,8 @@ def test_graph_sheet(tmp_path):
     cfg = cfgmod.default_config()
     items, _ = cfgmod.build_items(cfg, u, lg)
     t = build_analysis_table(r, u, lg, items, "経過時間(s)")
-    graphs = [GraphSetting("voltage_mV", "current_mA"), GraphSetting("CH1", None)]
+    # グラフ1：横軸は初期値（elapsed_ms）、グラフ2：横軸は経過時間(s)
+    graphs = [GraphSetting("voltage_mV", "current_mA"), GraphSetting("CH1", None, ELAPSED_KEY)]
     out = str(tmp_path / "o.xlsx")
     write_workbook(out, t, u, lg, graphs)
 
@@ -94,8 +95,9 @@ def test_graph_sheet(tmp_path):
         c1 = z.read("xl/charts/chart1.xml").decode().replace(" />", "/>")
         c2 = z.read("xl/charts/chart2.xml").decode().replace(" />", "/>")
     last = 6 + len(r.rows)
-    # 横軸 = 解析シートの経過時間(s)列
-    assert f"'解析'!$A$7:$A${last}" in c1
+    # 横軸 = 解析シートの elapsed_ms 列（B列）、横軸タイトルはそのラベル
+    assert f"<xVal><numRef><f>'解析'!$B$7:$B${last}</f>" in c1
+    assert "time(ms)" in c1
     # 第1軸 電圧 = C列、第2軸 電流 = D列（elapsed_ms が B列）
     assert f"'解析'!$C$7:$C${last}" in c1 and f"'解析'!$D$7:$D${last}" in c1
     assert c1.count("<scatterChart>") == 2  # 第2軸あり
@@ -103,9 +105,13 @@ def test_graph_sheet(tmp_path):
     assert "電圧(mV) / 電流(mA)" in c1
     assert '<dispBlanksAs val="gap"/>' in c1
     assert '<symbol val="none"/>' in c1
+    # 文字が重ならない設定：タイトル・凡例・軸タイトルは overlay なし、目盛の数値は外側
+    assert c1.count('<overlay val="0"/>') == 5  # グラフタイトル・横軸・第1軸・第2軸・凡例
+    assert '<tickLblPos val="low"/>' in c1 and '<tickLblPos val="high"/>' in c1
     # グラフ2：第2軸なし、CH1 は UART の右に1列空けた位置（A + 6項目 + 空列 → I列）
     assert c2.count("<scatterChart>") == 1
     assert f"'解析'!$I$7:$I${last}" in c2
+    assert f"<xVal><numRef><f>'解析'!$A$7:$A${last}</f>" in c2
     assert "経過時間(s)" in c2
     wb = openpyxl.load_workbook(out)
     assert len(wb["グラフ"]._charts) == 2
@@ -113,6 +119,11 @@ def test_graph_sheet(tmp_path):
 
 def test_validate_graphs():
     items = [ItemSetting("a", SOURCE_UART, True, "A"), ItemSetting("b", SOURCE_UART, False, "B")]
+    assert validate_graphs([GraphSetting("a", None)], items)  # 横軸 elapsed_ms が採用されていない
+    assert validate_graphs([GraphSetting("a", None, ELAPSED_KEY)], items) == []
+    assert validate_graphs([GraphSetting("a", None, None)], items)
+    assert validate_graphs([GraphSetting("a", None, "a")], items)  # 横軸と縦軸が同じ
+    items.append(ItemSetting("elapsed_ms", SOURCE_UART, True, "time(ms)"))
     assert validate_graphs([GraphSetting("a", None)], items) == []
     assert validate_graphs([GraphSetting(None, None)], items)
     assert validate_graphs([GraphSetting("b", None)], items)

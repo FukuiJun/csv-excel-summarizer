@@ -8,7 +8,7 @@ import exporter
 from helpers import write_logger_csv, write_uart_csv
 from logger_reader import read_logger_csv
 from merger import build_analysis_table, merge
-from models import GraphSetting
+from models import ELAPSED_KEY, GraphSetting
 from uart_reader import read_uart_csv
 
 
@@ -93,7 +93,7 @@ def test_save_on_success_and_restore(tmp_path):
     assert cfgmod.elapsed_label(cfg2) == "秒"
     # ラベルを変更してもグラフ設定は元の列（キー）に対応したまま
     assert cfgmod.build_graphs(cfg2, items2) == graphs
-    assert cfg2["graphs"][0] == {"primary": "voltage_mV", "secondary": "CH1"}
+    assert cfg2["graphs"][0] == {"x": "elapsed_ms", "primary": "voltage_mV", "secondary": "CH1"}
     assert cfg2["last_dirs"] == {"uart": str(tmp_path), "logger": str(tmp_path)}
 
 
@@ -182,3 +182,25 @@ def test_reset_to_defaults(tmp_path):
     assert (by["CH1"].enabled, by["CH1"].label) == (True, "CH1(mV)")
     assert cfgmod.build_graphs(cfg, items, use_saved=False) == [GraphSetting("voltage_mV", "current_mA")]
     assert cfgmod.elapsed_label(cfg, use_saved=False) == "経過時間(s)"
+
+
+def test_graph_x_axis_default_and_restore(tmp_path):
+    u, lg = _data(tmp_path)
+    cfg = cfgmod.default_config()
+    assert cfg["graphs"][0]["x"] == "elapsed_ms"
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    assert cfgmod.build_graphs(cfg, items)[0].x == "elapsed_ms"
+
+    # 横軸の設定がない古い config.json は初期値（elapsed_ms）になる
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"graphs": [{"primary": "voltage_mV", "secondary": None}]}), encoding="utf-8")
+    old = cfgmod.load_config(str(p)).config
+    assert cfgmod.build_graphs(old, items) == [GraphSetting("voltage_mV", None, "elapsed_ms")]
+
+    # 経過時間(s) を選んだ設定は保存・復元される
+    new = cfgmod.apply_settings(cfg, items, [GraphSetting("voltage_mV", None, ELAPSED_KEY)], "経過時間(s)")
+    assert cfgmod.build_graphs(new, items) == [GraphSetting("voltage_mV", None, ELAPSED_KEY)]
+
+    # 横軸の項目の採用を外すと未選択
+    {it.key: it for it in items}["elapsed_ms"].enabled = False
+    assert cfgmod.build_graphs(cfg, items)[0].x is None

@@ -7,6 +7,11 @@ from dataclasses import dataclass
 SOURCE_UART = "uart"
 SOURCE_LOGGER = "logger"
 
+# グラフ横軸で「経過時間(s)」（pc_timestamp から求めた経過秒数）を表すキー
+ELAPSED_KEY = "@elapsed"
+# グラフ横軸の初期値
+DEFAULT_X_KEY = "elapsed_ms"
+
 
 @dataclass
 class ItemSetting:
@@ -28,7 +33,11 @@ class ItemSetting:
 
 @dataclass
 class GraphSetting:
-    """グラフ1つ分の設定（仕様 5.2.4）。キーは ItemSetting.key。"""
+    """グラフ1つ分の設定（仕様 5.2.4）。キーは ItemSetting.key（横軸は ELAPSED_KEY も可）。
+
+    未選択は primary/x が None、secondary が ""（None は「なし」）。
+    """
 
     primary: str | None
     secondary: str | None = None
+    x: str | None = DEFAULT_X_KEY

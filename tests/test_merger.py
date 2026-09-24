@@ -147,3 +147,33 @@ def test_max_sheet_rows_uses_largest_sheet(tmp_path):
     # ロガーの元データシート（ヘッダ部 + データ50行）が最大
     assert max_sheet_rows(len(r.rows), u, lg) == len(lg.raw_rows)
     assert len(lg.raw_rows) > 6 + len(r.rows)
+
+
+def test_elapsed_ms_estimated_on_rows_without_uart(tmp_path):
+    times = [i * 1000 for i in range(10)]
+    del times[3:5]
+    u, lg = load(tmp_path, times, 60)
+    r = merge(u, lg, 1000, 200)
+    items = [
+        ItemSetting("elapsed_ms", SOURCE_UART, True, "time(ms)"),
+        ItemSetting("voltage_mV", SOURCE_UART, True, "V"),
+    ]
+    t = build_analysis_table(r, u, lg, items, "経過時間(s)")
+    # helpers の elapsed_ms は 行インデックス×1000。欠落行（3,4）は直前(2000)＋間隔で推定、他の UART 値は空欄
+    assert [row[1][0] for row in t.rows] == [0, 1000, 2000, 3000, 4000, 3000, 4000, 5000, 6000, 7000]
+    assert t.rows[3][1][1] is None
+    # 係数・オフセットも推定値に適用される
+    items[0].coef, items[0].offset = 0.001, 1
+    t = build_analysis_table(r, u, lg, items, "経過時間(s)")
+    assert t.rows[4][1][0] == pytest.approx(5.0)
+
+
+def test_elapsed_ms_estimated_logger_based(tmp_path):
+    times = [i * 100 for i in range(20)]
+    del times[5:9]
+    u, lg = load(tmp_path, times, 10)
+    r = merge(u, lg, 100, 200)
+    items = [ItemSetting("elapsed_ms", SOURCE_UART, True, "time(ms)")]
+    t = build_analysis_table(r, u, lg, items, "経過時間(s)")
+    # t=600,800 は欠落：直前の実行（t=400, elapsed_ms=4000）＋差分
+    assert t.rows[3][1][0] == pytest.approx(4200) and t.rows[4][1][0] == pytest.approx(4400)

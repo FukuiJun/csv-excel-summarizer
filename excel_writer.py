@@ -10,12 +10,13 @@ from typing import Callable
 from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.chart import Reference, ScatterChart, Series
+from openpyxl.chart.axis import NumericAxis
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 
 from logger_reader import LoggerData
 from merger import AnalysisTable
-from models import GraphSetting, ItemSetting
+from models import ELAPSED_KEY, GraphSetting, ItemSetting
 from uart_reader import TIMESTAMP_COLUMN, UartData, parse_timestamp
 
 SHEET_ANALYSIS = "解析"
@@ -177,12 +178,15 @@ def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], c
     first = DATA_START_ROW
     last = DATA_START_ROW + len(table.rows) - 1
     labels = {it.key: it.label for it in table.uart_items + table.logger_items}
+    labels[ELAPSED_KEY] = table.elapsed_label
+    col_of = {**col_of, ELAPSED_KEY: 1}
 
     def ref(col: int):
         return Reference(ws_data, min_col=col, min_row=first, max_row=last)
 
     for gi, g in enumerate(graphs):
-        xref = ref(1)
+        x_key = g.x or ELAPSED_KEY
+        xref = ref(col_of[x_key])
         c1 = ScatterChart()
         c1.scatterStyle = "lineMarker"
         c1.display_blanks = "gap"
@@ -195,7 +199,7 @@ def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], c
         s1.graphicalProperties.line.solidFill = PRIMARY_COLOR
         s1.graphicalProperties.line.width = 19050
         c1.series.append(s1)
-        c1.x_axis.title = table.elapsed_label
+        c1.x_axis.title = labels[x_key]
         c1.y_axis.title = p_label
         c1.x_axis.axPos = "b"
         c1.x_axis.delete = False
@@ -217,11 +221,29 @@ def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], c
             c2.y_axis.axPos = "r"
             c2.y_axis.majorGridlines = None
             c2.y_axis.delete = False
-            c2.x_axis = c1.x_axis
+            # 第2軸のグループには非表示の横軸を別に持たせる（Excel が作る2軸グラフと同じ構成）
+            c2.x_axis = NumericAxis(axId=500, crossAx=200, delete=True, axPos="b")
+            c2.x_axis.title = None
+            c2.x_axis.majorGridlines = None
+            c2.y_axis.crossAx = 500
             c1 += c2
             title = f"{p_label} / {s_label}"
         c1.title = title
         c1.legend.position = "b"
+        # タイトル・軸タイトル・凡例がグラフ本体や目盛の数値と重ならないよう、重ねない配置にする
+        c1.title.overlay = False
+        c1.legend.overlay = False
+        c1.x_axis.title.overlay = False
+        c1.y_axis.title.overlay = False
+        if g.secondary:
+            c2.y_axis.title.overlay = False
+        # 目盛の数値は軸の外側（左端・下端・右端）に置き、軸タイトルとぶつからないようにする
+        c1.x_axis.tickLblPos = "low"
+        c1.x_axis.crosses = "min"  # 横軸は常にグラフの下端（縦軸に負の値があっても中央に来ない）
+        c1.y_axis.crosses = "min"
+        c1.y_axis.tickLblPos = "low"
+        if g.secondary:
+            c2.y_axis.tickLblPos = "high"
         anchor_row = 1 + gi * CHART_ROW_STEP
         ws.add_chart(c1, f"A{anchor_row}")
 
@@ -231,6 +253,10 @@ def validate_graphs(graphs: list[GraphSetting], items: list[ItemSetting]) -> lis
     enabled = {it.key for it in items if it.enabled}
     errors = []
     for i, g in enumerate(graphs, start=1):
+        if not g.x or (g.x != ELAPSED_KEY and g.x not in enabled):
+            errors.append(f"グラフ{i}：横軸を選択してください。")
+        elif g.x in (g.primary, g.secondary):
+            errors.append(f"グラフ{i}：横軸と縦軸に同じ項目は選べません。")
         if not g.primary or g.primary not in enabled:
             errors.append(f"グラフ{i}：第1軸を選択してください。")
         if g.secondary is not None and g.secondary != "":

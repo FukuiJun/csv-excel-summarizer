@@ -49,7 +49,7 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
 | 読み込み結果 | 行数・時刻・スキップ行数・重複行数・欠落の警告。［詳細］で欠落箇所の一覧 |
 | 間隔 | UART間隔（初期値：`pc_timestamp` の差の中央値を100ms単位に丸めた値）とロガー間隔（初期値：ヘッダの測定間隔）。変更するとその場で再計算します |
 | 出力する項目 | 採用・ラベル・係数・オフセット。出力値は `元の値 × 係数 ＋ オフセット` |
-| グラフ | 1行1グラフ。第1軸（左）は必須、第2軸（右）は「なし」も可。0個ならグラフシートを作りません |
+| グラフ | 1行1グラフ。横軸（初期値 elapsed_ms、経過時間(s) も選べる）・第1軸（左）は必須、第2軸（右）は「なし」も可。0個ならグラフシートを作りません |
 | 出力先 | 初期値は UART CSV のフォルダと `解析_<UART 1行目の時刻>.xlsx` |
 
 入力にエラーがある欄は赤くなり、画面下にエラー内容が表示され、［Excelに出力］は押せなくなります。
@@ -62,7 +62,7 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
 
 - UART の 1 行目の `pc_timestamp` とロガーの番号1 を経過時間 0 とします（両方の記録を同時に開始する運用が前提）
 - ロガーの内部時刻は使わず、ロガー各行の経過時間は `(番号 − 1) × ロガー間隔` とみなします
-- UART の時刻の差が間隔の 1.5 倍を超える箇所は受信の欠落とみなし、空欄の行を補完します（Excel では灰色の行）。0.5 倍未満の行は二重受信として捨てます
+- UART の時刻の差が間隔の 1.5 倍を超える箇所は受信の欠落とみなし、空欄の行を補完します（Excel では灰色の行）。グラフの横軸に使えるよう、補完行の elapsed_ms だけは「直前の値＋経過時間」の推定値を入れます。0.5 倍未満の行は二重受信として捨てます
 - 間隔の長い方を基準に、短い方から時刻の最も近い行を採用します（例：UART 1000ms・ロガー 200ms ならロガーを約5行ごとに採用）
 
 ### 出力される Excel
@@ -70,7 +70,7 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
 | シート | 内容 |
 |---|---|
 | 解析 | 測定日時・測定機、UART の採用列（経過時間(s)が先頭）、1列空けてロガーの採用CH |
-| グラフ | 散布図（直線・マーカーなし）。横軸は経過時間(s)、空欄は線を途切れさせて表示 |
+| グラフ | 散布図（直線・マーカーなし）。横軸はグラフごとに選択（初期値は elapsed_ms）、空欄は線を途切れさせて表示 |
 | UART CSV のファイル名 | UART CSV の全データ（換算・補完なし） |
 | ロガー CSV のファイル名 | ロガー CSV の全内容（換算なし） |
 
@@ -94,8 +94,8 @@ UTF-8 で保存してください。
   "logger_label_format": "{ch}({unit})",
   "elapsed_label": "経過時間(s)",
   "graphs": [
-    {"primary": "voltage_mV", "secondary": "current_mA"},
-    {"primary": "soc_percent", "secondary": null}
+    {"x": "elapsed_ms", "primary": "voltage_mV", "secondary": "current_mA"},
+    {"x": "@elapsed", "primary": "soc_percent", "secondary": null}
   ],
   "last_dirs": {"uart": "C:\\data\\uart", "logger": "C:\\data\\logger"},
   "output_filename_format": "解析_{start:%y%m%d-%H%M%S}.xlsx",
@@ -110,7 +110,7 @@ UTF-8 で保存してください。
 | `logger_channels` | ロガーの CH ごと（キーは `CH1` など）の設定と、前回の単位 `unit`。単位が前回と違うと画面2に警告が出ます |
 | `logger_label_format` | 設定がない CH のラベルの書式。`{ch}` が CH 番号、`{unit}` が単位に置き換わります |
 | `elapsed_label` | 経過時間(s)列のラベル |
-| `graphs` | グラフの一覧。第1軸 `primary`・第2軸 `secondary` は列名・CH 番号で指定（`null` は「なし」） |
+| `graphs` | グラフの一覧。横軸 `x`・第1軸 `primary`・第2軸 `secondary` は列名・CH 番号で指定（`secondary` の `null` は「なし」、`x` の `"@elapsed"` は経過時間(s)。`x` を省略すると `elapsed_ms`） |
 | `last_dirs` | ［参照］ダイアログで最初に開くフォルダ |
 | `output_filename_format` | 出力ファイル名の書式。`{start:...}` に UART 1 行目の時刻が入ります（`%y%m%d` などは Python の strftime 書式） |
 | `row_warn_threshold` / `row_limit` | 行数の警告しきい値 / 上限 |

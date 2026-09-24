@@ -27,7 +27,7 @@ from merger import (
     max_sheet_rows,
     merge,
 )
-from models import SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
+from models import ELAPSED_KEY, SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
 from uart_reader import UartData, UartFormatError, read_uart_csv
 
 APP_TITLE = "ロガーCSV・UART CSV 統合ツール"
@@ -293,8 +293,11 @@ class GraphRow:
         self.primary: str | None = graph.primary
         # None = 「なし」、"" = 未選択
         self.secondary: str | None = graph.secondary
+        self.x: str | None = graph.x
         parent = frame.graph_inner
         self.no = ttk.Label(parent, width=3)
+        self.x_cb = ttk.Combobox(parent, state="readonly", width=20)
+        self.x_cb.bind("<<ComboboxSelected>>", lambda e: self._on_select())
         self.p_cb = ttk.Combobox(parent, state="readonly", width=24)
         self.s_cb = ttk.Combobox(parent, state="readonly", width=24)
         self.del_btn = ttk.Button(parent, text="削除", command=lambda: frame.remove_graph(self))
@@ -304,16 +307,27 @@ class GraphRow:
     def grid(self, row: int) -> None:
         self.no.configure(text=str(row))
         self.no.grid(row=row, column=0, padx=4, pady=2)
-        self.p_cb.grid(row=row, column=1, padx=4, pady=2)
-        self.s_cb.grid(row=row, column=2, padx=4, pady=2)
-        self.del_btn.grid(row=row, column=3, padx=4, pady=2)
+        self.x_cb.grid(row=row, column=1, padx=4, pady=2)
+        self.p_cb.grid(row=row, column=2, padx=4, pady=2)
+        self.s_cb.grid(row=row, column=3, padx=4, pady=2)
+        self.del_btn.grid(row=row, column=4, padx=4, pady=2)
 
     def destroy(self) -> None:
-        for w in (self.no, self.p_cb, self.s_cb, self.del_btn):
+        for w in (self.no, self.x_cb, self.p_cb, self.s_cb, self.del_btn):
             w.destroy()
 
-    def refresh(self, choices: list[tuple[str, str]]) -> None:
-        """選択肢（(key, label) の一覧）を更新し、採用が外れた項目は未選択にする。"""
+    def refresh(self, choices: list[tuple[str, str]], elapsed_label: str) -> None:
+        """選択肢（(key, label) の一覧）を更新し、採用が外れた項目は未選択にする。
+
+        横軸は「経過時間(s)」＋ choices から選ぶ。
+        """
+        x_choices = [(ELAPSED_KEY, elapsed_label)] + list(choices)
+        x_keys = [k for k, _ in x_choices]
+        if self.x not in x_keys:
+            self.x = None
+        self._x_keys = x_keys
+        self.x_cb.configure(values=[lab for _, lab in x_choices])
+        self.x_cb.set(x_choices[x_keys.index(self.x)][1] if self.x else "")
         keys = [k for k, _ in choices]
         labels = [lab for _, lab in choices]
         if self.primary not in keys:
@@ -332,6 +346,8 @@ class GraphRow:
             self.s_cb.set(labels[keys.index(self.secondary)])
 
     def _on_select(self) -> None:
+        xi = self.x_cb.current()
+        self.x = self._x_keys[xi] if xi >= 0 else None
         pi = self.p_cb.current()
         self.primary = self._keys[pi] if pi >= 0 else None
         si = self.s_cb.current()
@@ -341,12 +357,13 @@ class GraphRow:
             self.secondary = self._keys[si - 1]
         self.frame.validate()
 
-    def set_error(self, p_err: bool, s_err: bool) -> None:
+    def set_error(self, p_err: bool, s_err: bool, x_err: bool = False) -> None:
+        self.x_cb.configure(style="Error.TCombobox" if x_err else "TCombobox")
         self.p_cb.configure(style="Error.TCombobox" if p_err else "TCombobox")
         self.s_cb.configure(style="Error.TCombobox" if s_err else "TCombobox")
 
     def to_setting(self) -> GraphSetting:
-        return GraphSetting(self.primary, self.secondary)
+        return GraphSetting(self.primary, self.secondary, self.x)
 
 
 class AdjustFrame(ttk.Frame):
@@ -478,7 +495,7 @@ class AdjustFrame(ttk.Frame):
         box.pack(fill="x", pady=(6, 0))
         self.graph_inner = ttk.Frame(box)
         self.graph_inner.pack(anchor="w")
-        for c, text in enumerate(["No", "第1軸", "第2軸"]):
+        for c, text in enumerate(["No", "横軸", "第1軸", "第2軸"]):
             ttk.Label(self.graph_inner, text=text, font=("", 9, "bold")).grid(row=0, column=c, sticky="w", padx=4)
         ttk.Button(box, text="＋グラフを追加", command=self.add_graph).pack(anchor="w", pady=(4, 0))
 
@@ -487,10 +504,10 @@ class AdjustFrame(ttk.Frame):
             g.grid(i)
 
     def add_graph(self) -> None:
-        g = GraphRow(self, GraphSetting(None, None))
+        g = GraphRow(self, GraphSetting(None, None))  # 横軸は初期値（elapsed_ms）
         self.graph_rows.append(g)
         self._regrid_graphs()
-        g.refresh(self._graph_choices())
+        g.refresh(self._graph_choices(), self.elapsed_var.get().strip())
         self.validate()
 
     def remove_graph(self, g: GraphRow) -> None:
@@ -591,7 +608,7 @@ class AdjustFrame(ttk.Frame):
                 e.configure(state=state)
         choices = self._graph_choices()
         for g in self.graph_rows:
-            g.refresh(choices)
+            g.refresh(choices, self.elapsed_var.get().strip())
         self.validate()
 
     def validate(self) -> list[str]:
@@ -638,7 +655,8 @@ class AdjustFrame(ttk.Frame):
         for g in self.graph_rows:
             p_err = not g.primary or g.primary not in enabled
             s_err = g.secondary == "" or (g.secondary is not None and (g.secondary not in enabled or g.secondary == g.primary))
-            g.set_error(p_err, s_err)
+            x_err = not g.x or (g.x != ELAPSED_KEY and g.x not in enabled) or g.x in (g.primary, g.secondary)
+            g.set_error(p_err, s_err, x_err)
         errors.extend(validate_graphs(graphs, items))
 
         # 出力先

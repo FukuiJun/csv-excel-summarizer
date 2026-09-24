@@ -49,6 +49,10 @@ def test_screen2_flow(app, tmp_path):
     assert f.validate() == []
     assert f.filename.get() == "解析_260924-090954.xlsx"
     assert f.folder.get() == str(tmp_path)
+    # グラフの横軸は初期値 elapsed_ms（ラベル time(ms)）、選択肢に経過時間(s)もある
+    assert f.graph_rows[0].x == "elapsed_ms"
+    assert f.graph_rows[0].x_cb.get() == "time(ms)"
+    assert "経過時間(s)" in f.graph_rows[0].x_cb.cget("values")
 
     # 間隔の入力エラーで出力ボタンが無効になる
     f.uart_int.set("0")

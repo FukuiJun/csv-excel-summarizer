@@ -13,6 +13,9 @@ from models import SOURCE_LOGGER, SOURCE_UART, ItemSetting
 from uart_reader import UartData
 
 
+ELAPSED_MS_COLUMN = "elapsed_ms"
+
+
 def round_half_up(x: float) -> int:
     """四捨五入（Python の round は偶数丸めのため使わない）。"""
     return int(math.floor(x + 0.5))
@@ -200,11 +203,22 @@ def build_analysis_table(
 ) -> AnalysisTable:
     uart_items = [it for it in items if it.enabled and it.source == SOURCE_UART and it.key in uart.values]
     logger_items = [it for it in items if it.enabled and it.source == SOURCE_LOGGER and it.key in logger.values]
+    # UART 行がない行（欠落補完行など）の elapsed_ms は、直前の実 UART 行から推定する
+    tl = result.timeline
+    real_t = [t for t, s in zip(tl.t_ms, tl.src) if s is not None]
+    real_src = [s for s in tl.src if s is not None]
+    has_em = ELAPSED_MS_COLUMN in uart.values
     out = []
     for r in result.rows:
         sec = round(r.t_ms / 1000.0, 3)
         if r.uart_idx is None:
             uv = [None] * len(uart_items)
+            if has_em and real_t:
+                p = max(bisect.bisect_right(real_t, r.t_ms) - 1, 0)
+                est = round(uart.values[ELAPSED_MS_COLUMN][real_src[p]] + (r.t_ms - real_t[p]), 3)
+                for i, it in enumerate(uart_items):
+                    if it.key == ELAPSED_MS_COLUMN:
+                        uv[i] = it.convert(est)
         else:
             uv = [it.convert(uart.values[it.key][r.uart_idx]) for it in uart_items]
         if r.logger_idx is None:

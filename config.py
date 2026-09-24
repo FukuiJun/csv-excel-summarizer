@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from logger_reader import LoggerData
-from models import SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
+from models import DEFAULT_X_KEY, ELAPSED_KEY, SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
 from uart_reader import UartData
 
 CONFIG_FILENAME = "config.json"
@@ -27,7 +27,7 @@ DEFAULT_UART_COLUMNS: dict[str, dict] = {
     "temp_C": {"enabled": True, "label": "温度(℃)", "coef": 1, "offset": 0},
 }
 
-DEFAULT_GRAPHS: list[dict] = [{"primary": "voltage_mV", "secondary": "current_mA"}]
+DEFAULT_GRAPHS: list[dict] = [{"x": DEFAULT_X_KEY, "primary": "voltage_mV", "secondary": "current_mA"}]
 
 DEFAULT_CONFIG: dict = {
     "uart_columns": DEFAULT_UART_COLUMNS,
@@ -106,8 +106,10 @@ def _normalize(raw: dict) -> dict:
             if isinstance(g, dict):
                 p = g.get("primary")
                 s = g.get("secondary")
+                x = g.get("x", DEFAULT_X_KEY)  # 横軸の設定がない古い config.json は初期値
                 graphs.append(
                     {
+                        "x": x if isinstance(x, str) else None,
                         "primary": p if isinstance(p, str) else None,
                         "secondary": s if isinstance(s, str) else None,
                     }
@@ -224,11 +226,13 @@ def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True) ->
     for g in src:
         p = g.get("primary")
         s = g.get("secondary")
+        x = g.get("x", DEFAULT_X_KEY)
         graphs.append(
             GraphSetting(
                 primary=p if p in enabled else None,
                 # 第2軸は「なし」(None) と未選択を区別するため、無効なキーは "" にする
                 secondary=None if s is None else (s if s in enabled else ""),
+                x=x if (x == ELAPSED_KEY or x in enabled) else None,
             )
         )
     return graphs
@@ -262,7 +266,7 @@ def apply_settings(
         else:
             d["unit"] = it.unit
             new["logger_channels"][it.key] = d
-    new["graphs"] = [{"primary": g.primary, "secondary": g.secondary or None} for g in graphs]
+    new["graphs"] = [{"x": g.x, "primary": g.primary, "secondary": g.secondary or None} for g in graphs]
     new["elapsed_label"] = elapsed
     new.setdefault("last_dirs", {"uart": "", "logger": ""})
     if uart_dir:
