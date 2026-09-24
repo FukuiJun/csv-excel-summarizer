@@ -16,15 +16,15 @@ from uart_reader import UartData
 CONFIG_FILENAME = "config.json"
 
 DEFAULT_UART_COLUMNS: dict[str, dict] = {
-    "t_ms": {"enabled": False, "label": "t_ms", "coef": 1, "offset": 0},
-    "elapsed_ms": {"enabled": True, "label": "time(ms)", "coef": 1, "offset": 0},
-    "voltage_mV": {"enabled": True, "label": "電圧(mV)", "coef": 1, "offset": 0},
-    "current_mA": {"enabled": True, "label": "電流(mA)", "coef": 1, "offset": 0},
-    "cap_mAh": {"enabled": True, "label": "CAP(mAh)", "coef": 1, "offset": 0},
-    "cap_max_mAh": {"enabled": False, "label": "CAP_MAX(mAh)", "coef": 1, "offset": 0},
-    "soc_percent": {"enabled": True, "label": "SOC(％)", "coef": 1, "offset": 0},
-    "soh_percent": {"enabled": False, "label": "SOH(％)", "coef": 1, "offset": 0},
-    "temp_C": {"enabled": True, "label": "温度(℃)", "coef": 1, "offset": 0},
+    "t_ms": {"enabled": False, "label": "t_ms", "coef": 1},
+    "elapsed_ms": {"enabled": True, "label": "time(ms)", "coef": 1},
+    "voltage_mV": {"enabled": True, "label": "電圧(mV)", "coef": 1},
+    "current_mA": {"enabled": True, "label": "電流(mA)", "coef": 1},
+    "cap_mAh": {"enabled": True, "label": "CAP(mAh)", "coef": 1},
+    "cap_max_mAh": {"enabled": False, "label": "CAP_MAX(mAh)", "coef": 1},
+    "soc_percent": {"enabled": True, "label": "SOC(％)", "coef": 1},
+    "soh_percent": {"enabled": False, "label": "SOH(％)", "coef": 1},
+    "temp_C": {"enabled": True, "label": "温度(℃)", "coef": 1},
 }
 
 DEFAULT_GRAPHS: list[dict] = [{"x": DEFAULT_X_KEY, "primary": "voltage_mV", "secondary": "current_mA"}]
@@ -73,7 +73,6 @@ def _clean_item(v, with_unit: bool) -> dict | None:
         "enabled": bool(v.get("enabled", True)),
         "label": str(v.get("label", "")),
         "coef": v.get("coef", 1) if _is_num(v.get("coef", 1)) else 1,
-        "offset": v.get("offset", 0) if _is_num(v.get("offset", 0)) else 0,
     }
     if with_unit:
         out["unit"] = str(v.get("unit", ""))
@@ -170,8 +169,8 @@ def save_config(cfg: dict, path: str | None = None) -> None:
 
 
 def default_uart_item(col: str) -> ItemSetting:
-    d = DEFAULT_UART_COLUMNS.get(col, {"enabled": True, "label": col, "coef": 1, "offset": 0})
-    return ItemSetting(col, SOURCE_UART, d["enabled"], d["label"], float(d["coef"]), float(d["offset"]))
+    d = DEFAULT_UART_COLUMNS.get(col, {"enabled": True, "label": col, "coef": 1})
+    return ItemSetting(col, SOURCE_UART, d["enabled"], d["label"], float(d["coef"]))
 
 
 def logger_default_label(fmt: str, ch: str, unit: str) -> str:
@@ -182,7 +181,7 @@ def logger_default_label(fmt: str, ch: str, unit: str) -> str:
 
 
 def default_logger_item(ch: str, unit: str, fmt: str) -> ItemSetting:
-    return ItemSetting(ch, SOURCE_LOGGER, True, logger_default_label(fmt, ch, unit), 1.0, 0.0, unit)
+    return ItemSetting(ch, SOURCE_LOGGER, True, logger_default_label(fmt, ch, unit), 1.0, unit=unit)
 
 
 def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool = True) -> tuple[list[ItemSetting], list[str]]:
@@ -198,7 +197,7 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
     for col in uart.columns:
         s = saved_u.get(col)
         if s:
-            items.append(ItemSetting(col, SOURCE_UART, s["enabled"], s["label"], float(s["coef"]), float(s["offset"])))
+            items.append(ItemSetting(col, SOURCE_UART, s["enabled"], s["label"], float(s["coef"])))
         else:
             items.append(default_uart_item(col))
 
@@ -206,7 +205,7 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
         s = saved_l.get(ch.name)
         if s:
             items.append(
-                ItemSetting(ch.name, SOURCE_LOGGER, s["enabled"], s["label"], float(s["coef"]), float(s["offset"]), ch.unit)
+                ItemSetting(ch.name, SOURCE_LOGGER, s["enabled"], s["label"], float(s["coef"]), unit=ch.unit)
             )
             if s.get("unit", "") != ch.unit:
                 warnings.append(
@@ -260,7 +259,7 @@ def apply_settings(
     new.setdefault("uart_columns", {})
     new.setdefault("logger_channels", {})
     for it in items:
-        d = {"enabled": it.enabled, "label": it.label, "coef": it.coef, "offset": it.offset}
+        d = {"enabled": it.enabled, "label": it.label, "coef": it.coef}
         if it.source == SOURCE_UART:
             new["uart_columns"][it.key] = d
         else:

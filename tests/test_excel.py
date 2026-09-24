@@ -139,3 +139,35 @@ def test_sheet_and_file_names():
     assert invalid_filename_chars('a<b>.xlsx') == ["<", ">"]
     assert normalize_filename("abc") == "abc.xlsx"
     assert normalize_filename("abc.XLSX") == "abc.XLSX"
+
+
+def test_analysis_sheet_styles_and_tab_colors(tmp_path):
+    u, lg, r = _setup(tmp_path, gaps=True)
+    cfg = cfgmod.default_config()
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    t = build_analysis_table(r, u, lg, items, "経過時間(s)")
+    out = str(tmp_path / "o.xlsx")
+    write_workbook(out, t, u, lg, [GraphSetting("voltage_mV", None)])
+    wb = openpyxl.load_workbook(out)
+    assert wb["解析"].sheet_properties.tabColor.rgb.endswith("A9D08E")
+    assert wb["グラフ"].sheet_properties.tabColor.rgb.endswith("F4B084")
+    assert wb["u"].sheet_properties.tabColor is None
+
+    ws = wb["解析"]
+    # A〜G: UART（経過時間 + 6項目）、H: 空列、I〜J: ロガー
+    assert ws["A5"].font.b and ws["I5"].font.b
+    for col in "ABCDEFGIJ":
+        c = ws[f"{col}6"]
+        assert c.fill.fgColor.rgb.endswith("E2EFDA"), col
+        assert c.border.left.style == c.border.right.style == c.border.top.style == c.border.bottom.style == "thin"
+    assert ws["H6"].fill.fill_type is None
+    # データ部はブロックの外枠だけ
+    assert ws["A7"].border.left.style == "thin" and (ws["A7"].border.right is None or ws["A7"].border.right.style is None)
+    assert ws["G7"].border.right.style == "thin"
+    assert ws["I7"].border.left.style == "thin" and ws["J7"].border.right.style == "thin"
+    assert ws["C7"].border.left.style is None and ws["H7"].border.left.style is None
+    last = 6 + len(r.rows)
+    for col in "ACGIJ":
+        assert ws[f"{col}{last}"].border.bottom.style == "thin", col
+    assert ws[f"H{last}"].border.bottom.style is None
+    assert ws[f"C{last - 1}"].border.bottom.style is None

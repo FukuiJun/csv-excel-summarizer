@@ -163,9 +163,9 @@ def test_elapsed_ms_estimated_on_rows_without_uart(tmp_path):
     assert [row[1][0] for row in t.rows] == [0, 1000, 2000, 3000, 4000, 3000, 4000, 5000, 6000, 7000]
     assert t.rows[3][1][1] is None
     # 係数・オフセットも推定値に適用される
-    items[0].coef, items[0].offset = 0.001, 1
+    items[0].coef = 0.001
     t = build_analysis_table(r, u, lg, items, "経過時間(s)")
-    assert t.rows[4][1][0] == pytest.approx(5.0)
+    assert t.rows[4][1][0] == pytest.approx(4.0)
 
 
 def test_elapsed_ms_estimated_logger_based(tmp_path):
@@ -177,3 +177,35 @@ def test_elapsed_ms_estimated_logger_based(tmp_path):
     t = build_analysis_table(r, u, lg, items, "経過時間(s)")
     # t=600,800 は欠落：直前の実行（t=400, elapsed_ms=4000）＋差分
     assert t.rows[3][1][0] == pytest.approx(4200) and t.rows[4][1][0] == pytest.approx(4400)
+
+
+def test_time_offset_logger_delayed(tmp_path):
+    # ロガーを +1000ms 遅らせる → UART の t=2000 にロガーの t=1000（インデックス5）が対応する
+    u, lg = load(tmp_path, [i * 1000 for i in range(10)], 50)
+    r = merge(u, lg, 1000, 200, logger_offset_ms=1000)
+    assert [x.logger_idx for x in r.rows] == [None, 0, 5, 10, 15, 20, 25, 30, 35, 40]
+    assert [x.t_ms for x in r.rows][:2] == [0, 1000]
+
+
+def test_time_offset_logger_advanced(tmp_path):
+    # ロガーを -1000ms（早める）→ UART の t=0 にロガーの t=1000（インデックス5）
+    u, lg = load(tmp_path, [i * 1000 for i in range(10)], 50)
+    r = merge(u, lg, 1000, 200, logger_offset_ms=-1000)
+    assert [x.logger_idx for x in r.rows] == [5, 10, 15, 20, 25, 30, 35, 40, 45]  # ロガーが先に尽きる
+
+
+def test_time_offset_uart(tmp_path):
+    # UART を +1000ms 遅らせるのは、ロガーを -1000ms にするのと同じ対応。経過時間は UART 側がずれる
+    u, lg = load(tmp_path, [i * 1000 for i in range(10)], 60)
+    r = merge(u, lg, 1000, 200, uart_offset_ms=1000)
+    assert [x.logger_idx for x in r.rows][:3] == [5, 10, 15]
+    assert r.rows[0].t_ms == 1000
+    t = build_analysis_table(r, u, lg, [], "経過時間(s)")
+    assert t.rows[0][0] == 1.0
+
+
+def test_time_offset_logger_based(tmp_path):
+    u, lg = load(tmp_path, [i * 100 for i in range(30)], 10)
+    r = merge(u, lg, 100, 200, logger_offset_ms=500)
+    # ロガー行 i の時刻は i*200+500 → UART 行 (i*200+500)/100
+    assert [x.uart_idx for x in r.rows] == [5, 7, 9, 11, 13, 15, 17, 19, 21, 23]

@@ -79,7 +79,7 @@ def test_save_on_success_and_restore(tmp_path):
     by["voltage_mV"].label = "電圧(V)"
     by["voltage_mV"].coef = 0.001
     by["t_ms"].enabled = True
-    by["CH1"].offset = -0.5
+    by["CH1"].coef = 1000
     graphs = [GraphSetting("voltage_mV", "CH1"), GraphSetting("soc_percent", None)]
     res = _export(tmp_path, cfg, cfg_path, u, lg, items, graphs, elapsed="秒")
     assert res.config_error is None
@@ -89,7 +89,9 @@ def test_save_on_success_and_restore(tmp_path):
     by2 = {it.key: it for it in items2}
     assert (by2["voltage_mV"].label, by2["voltage_mV"].coef) == ("電圧(V)", 0.001)
     assert by2["t_ms"].enabled is True
-    assert by2["CH1"].offset == -0.5
+    assert by2["CH1"].coef == 1000
+    # 項目ごとのオフセットは廃止（保存しない）
+    assert "offset" not in json.load(open(cfg_path, encoding="utf-8"))["logger_channels"]["CH1"]
     assert cfgmod.elapsed_label(cfg2) == "秒"
     # ラベルを変更してもグラフ設定は元の列（キー）に対応したまま
     assert cfgmod.build_graphs(cfg2, items2) == graphs
@@ -204,3 +206,11 @@ def test_graph_x_axis_default_and_restore(tmp_path):
     # 横軸の項目の採用を外すと未選択
     {it.key: it for it in items}["elapsed_ms"].enabled = False
     assert cfgmod.build_graphs(cfg, items)[0].x is None
+
+
+def test_old_item_offset_is_ignored(tmp_path):
+    cfg = cfgmod.default_config()
+    cfg["uart_columns"]["voltage_mV"] = {"enabled": True, "label": "V", "coef": 1, "offset": 5}
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    assert {it.key: it for it in items}["voltage_mV"].offset == 0

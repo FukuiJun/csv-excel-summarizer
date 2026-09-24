@@ -11,7 +11,7 @@ from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.chart import Reference, ScatterChart, Series
 from openpyxl.chart.axis import NumericAxis
-from openpyxl.styles import PatternFill
+from openpyxl.styles import Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from logger_reader import LoggerData
@@ -26,6 +26,12 @@ HEADER_ROW = 6
 DATA_START_ROW = 7
 
 GAP_FILL = PatternFill("solid", fgColor="D9D9D9")
+HEADER_FILL = PatternFill("solid", fgColor="E2EFDA")  # 見出し行（薄い緑）
+TITLE_FONT = Font(bold=True, size=12)
+THIN = Side(style="thin", color="000000")
+# シート見出し（タブ）の色
+TAB_COLOR_ANALYSIS = "A9D08E"  # 緑
+TAB_COLOR_GRAPH = "F4B084"  # オレンジ
 PRIMARY_COLOR = "4472C4"
 SECONDARY_COLOR = "ED7D31"
 
@@ -131,18 +137,42 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     ws.append([])
     ws.append([])
 
+    uart_cols = range(1, n_uart_cols + 1)  # 1始まりの列番号
+    logger_cols = range(logger_start, total_cols + 1) if table.logger_items else range(0)
+    blocks = [uart_cols] + ([logger_cols] if table.logger_items else [])
+
+    def styled(value, col: int, *, font=None, fill=None, border_all=False, bottom=False):
+        c = WriteOnlyCell(ws, value=value)
+        if font is not None:
+            c.font = font
+        if fill is not None:
+            c.fill = fill
+        if border_all:
+            c.border = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+        else:
+            # データ部は各ブロック（UART・ロガー）の外枠だけ線を引く
+            left = right = None
+            for b in blocks:
+                if col == b.start:
+                    left = THIN
+                if col == b.stop - 1:
+                    right = THIN
+            if left or right or bottom:
+                c.border = Border(left=left, right=right, bottom=THIN if bottom else None)
+        return c
+
     row5 = [None] * total_cols
-    row5[0] = "マイコン内部データ(UART)"
+    row5[0] = styled("マイコン内部データ(UART)", 1, font=TITLE_FONT)
     if table.logger_items:
-        row5[logger_start - 1] = "測定値"
+        row5[logger_start - 1] = styled("測定値", logger_start, font=TITLE_FONT)
     ws.append(row5)
 
     row6: list = [None] * total_cols
-    row6[0] = table.elapsed_label
-    for i, it in enumerate(table.uart_items):
-        row6[1 + i] = it.label
+    labels6 = [table.elapsed_label] + [it.label for it in table.uart_items]
+    for i, lab in enumerate(labels6):
+        row6[i] = styled(lab, 1 + i, fill=HEADER_FILL, border_all=True)
     for i, it in enumerate(table.logger_items):
-        row6[logger_start - 1 + i] = it.label
+        row6[logger_start - 1 + i] = styled(it.label, logger_start + i, fill=HEADER_FILL, border_all=True)
     ws.append(row6)
 
     col_of: dict[str, int] = {}
@@ -151,6 +181,8 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     for i, it in enumerate(table.logger_items):
         col_of.setdefault(it.key, logger_start + i)
 
+    edge_cols = {c for b in blocks for c in (b.start, b.stop - 1)}
+    in_block = set(uart_cols) | set(logger_cols)
     total = len(table.rows)
     for n, (sec, uv, lv, is_gap) in enumerate(table.rows):
         vals: list = [None] * total_cols
@@ -159,15 +191,14 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
             vals[1 + i] = v
         for i, v in enumerate(lv):
             vals[logger_start - 1 + i] = v
-        if is_gap:
-            cells = []
-            for v in vals:
-                wc = WriteOnlyCell(ws, value=v)
-                wc.fill = GAP_FILL
-                cells.append(wc)
-            ws.append(cells)
-        else:
-            ws.append(vals)
+        is_last = n == total - 1
+        for idx in range(total_cols):
+            col = idx + 1
+            if is_gap:
+                vals[idx] = styled(vals[idx], col, fill=GAP_FILL, bottom=is_last and col in in_block)
+            elif col in edge_cols or (is_last and col in in_block):
+                vals[idx] = styled(vals[idx], col, bottom=is_last)
+        ws.append(vals)
         if progress and n % 20000 == 0 and n:
             progress(f"解析シートを書き込み中… {n:,}/{total:,} 行")
     return col_of
@@ -289,10 +320,12 @@ def write_workbook(
     if progress:
         progress("解析シートを書き込み中…")
     ws_a = wb.create_sheet(sanitize_sheet_name(SHEET_ANALYSIS, used))
+    ws_a.sheet_properties.tabColor = TAB_COLOR_ANALYSIS
     col_of = _write_analysis(ws_a, table, uart, logger, progress)
 
     if graphs:
         ws_g = wb.create_sheet(sanitize_sheet_name(SHEET_GRAPH, used))
+        ws_g.sheet_properties.tabColor = TAB_COLOR_GRAPH
         _add_charts(ws_g, ws_a, table, graphs, col_of)
 
     if progress:

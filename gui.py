@@ -255,7 +255,6 @@ class ItemRow:
         self.enabled = tk.BooleanVar(value=item.enabled)
         self.label = tk.StringVar(value=item.label)
         self.coef = tk.StringVar(value=_fmt_num(item.coef))
-        self.offset = tk.StringVar(value=_fmt_num(item.offset))
 
         name = item.key if item.source == SOURCE_UART else f"{item.key} ({item.unit})"
         self.check = ttk.Checkbutton(parent, variable=self.enabled)
@@ -265,10 +264,8 @@ class ItemRow:
         self.label_e.grid(row=row, column=2, sticky="w", padx=4, pady=1)
         self.coef_e = tk.Entry(parent, textvariable=self.coef, width=10)
         self.coef_e.grid(row=row, column=3, padx=4)
-        self.offset_e = tk.Entry(parent, textvariable=self.offset, width=10)
-        self.offset_e.grid(row=row, column=4, padx=4)
 
-        for v in (self.enabled, self.label, self.coef, self.offset):
+        for v in (self.enabled, self.label, self.coef):
             v.trace_add("write", lambda *_: on_change())
 
     def to_setting(self) -> ItemSetting:
@@ -278,7 +275,6 @@ class ItemRow:
             enabled=self.enabled.get(),
             label=self.label.get().strip(),
             coef=_parse_float(self.coef.get()) if _parse_float(self.coef.get()) is not None else 1.0,
-            offset=_parse_float(self.offset.get()) if _parse_float(self.offset.get()) is not None else 0.0,
             unit=self.unit,
         )
 
@@ -425,7 +421,7 @@ class AdjustFrame(ttk.Frame):
 
     # ---- 間隔 --------------------------------------------------------------
     def _build_interval_section(self) -> None:
-        box = ttk.LabelFrame(self.body, text="間隔", padding=6)
+        box = ttk.LabelFrame(self.body, text="間隔・時間オフセット", padding=6)
         box.pack(fill="x", pady=(6, 0))
         line = ttk.Frame(box)
         line.pack(anchor="w")
@@ -439,6 +435,22 @@ class AdjustFrame(ttk.Frame):
         self.logger_int_e = tk.Entry(line, textvariable=self.logger_int, width=8)
         self.logger_int_e.pack(side="left", padx=4)
         ttk.Label(line, text="ms").pack(side="left")
+
+        # データ全体の時刻をずらす量（UART とロガーで変化のタイミングがずれているときの補正）
+        line2 = ttk.Frame(box)
+        line2.pack(anchor="w", pady=(4, 0))
+        self.uart_off = tk.StringVar(value="0")
+        self.logger_off = tk.StringVar(value="0")
+        ttk.Label(line2, text="時間オフセット  UART").pack(side="left")
+        self.uart_off_e = tk.Entry(line2, textvariable=self.uart_off, width=8)
+        self.uart_off_e.pack(side="left", padx=4)
+        ttk.Label(line2, text="ms     ロガー").pack(side="left")
+        self.logger_off_e = tk.Entry(line2, textvariable=self.logger_off, width=8)
+        self.logger_off_e.pack(side="left", padx=4)
+        ttk.Label(line2, text="ms   （＋で遅らせる。例：ロガーの変化が1秒早いときはロガーに 1000）").pack(side="left")
+        self.uart_off.trace_add("write", lambda *_: self.schedule_recalc())
+        self.logger_off.trace_add("write", lambda *_: self.schedule_recalc())
+
         self.mode_label = tk.Label(box, anchor="w")
         self.mode_label.pack(anchor="w", pady=(4, 0))
         self._mode_bg = self.mode_label.cget("bg")
@@ -457,8 +469,8 @@ class AdjustFrame(ttk.Frame):
         for w in inner.winfo_children():
             w.destroy()
         self.item_rows = []
-        inner.columnconfigure(5, weight=1)  # 余白は右端に寄せ、ラベル欄は伸ばさない
-        for c, text in enumerate(["採用", "元の列名", "ラベル", "係数", "オフセット"]):
+        inner.columnconfigure(4, weight=1)  # 余白は右端に寄せ、ラベル欄は伸ばさない
+        for c, text in enumerate(["採用", "元の列名", "ラベル", "係数"]):
             ttk.Label(inner, text=text, font=("", 9, "bold")).grid(row=0, column=c, sticky="w", padx=4)
 
         fixed = ttk.Checkbutton(inner)  # 経過時間は常に出力（外せない）
@@ -468,7 +480,6 @@ class AdjustFrame(ttk.Frame):
         self.elapsed_e = tk.Entry(inner, textvariable=self.elapsed_var, width=LABEL_WIDTH)
         self.elapsed_e.grid(row=1, column=2, sticky="w", padx=4, pady=1)
         ttk.Label(inner, text="―").grid(row=1, column=3)
-        ttk.Label(inner, text="―").grid(row=1, column=4)
         if not getattr(self, "_elapsed_traced", False):
             self.elapsed_var.trace_add("write", lambda *_: self.on_items_changed())
             self._elapsed_traced = True
@@ -477,7 +488,7 @@ class AdjustFrame(ttk.Frame):
         logger_header_done = False
         for it in items:
             if it.source == SOURCE_LOGGER and not logger_header_done:
-                ttk.Label(inner, text="── ロガー ──").grid(row=r, column=0, columnspan=5, sticky="w", pady=(4, 0))
+                ttk.Label(inner, text="── ロガー ──").grid(row=r, column=0, columnspan=4, sticky="w", pady=(4, 0))
                 r += 1
                 logger_header_done = True
             self.item_rows.append(ItemRow(inner, r, it, self.on_items_changed))
@@ -560,6 +571,9 @@ class AdjustFrame(ttk.Frame):
         lg = _parse_float(self.logger_int.get())
         return (u if u is not None and u > 0 else None, lg if lg is not None and lg > 0 else None)
 
+    def offsets(self) -> tuple[float | None, float | None]:
+        return _parse_float(self.uart_off.get()), _parse_float(self.logger_off.get())
+
     def schedule_recalc(self) -> None:
         if self._recalc_job is not None:
             self.after_cancel(self._recalc_job)
@@ -570,16 +584,20 @@ class AdjustFrame(ttk.Frame):
         u, lg = self.intervals()
         self.uart_int_e.configure(bg=OK_BG if u else ERR_BG)
         self.logger_int_e.configure(bg=OK_BG if lg else ERR_BG)
-        if not u or not lg:
+        uo, lo = self.offsets()
+        self.uart_off_e.configure(bg=OK_BG if uo is not None else ERR_BG)
+        self.logger_off_e.configure(bg=OK_BG if lo is not None else ERR_BG)
+        if not u or not lg or uo is None or lo is None:
             self.result = None
-            self.mode_label.configure(text="間隔を正の数値で入力してください。", fg="#c00000", bg=self._mode_bg)
+            msg = "間隔を正の数値で入力してください。" if not u or not lg else "時間オフセットを数値で入力してください。"
+            self.mode_label.configure(text=msg, fg="#c00000", bg=self._mode_bg)
             self.uart_info.configure(text=self._uart_summary_base)
             self.gap_label.configure(text="")
             self.gap_btn.pack_forget()
             self.validate()
             return
         tl = build_uart_timeline(self.uart, u)
-        self.result = merge(self.uart, self.logger, u, lg, timeline=tl)
+        self.result = merge(self.uart, self.logger, u, lg, timeline=tl, uart_offset_ms=uo, logger_offset_ms=lo)
         self.uart_info.configure(text=f"{self._uart_summary_base} / 重複{tl.duplicates:,}行")
         if tl.gaps:
             self.gap_label.configure(
@@ -604,7 +622,7 @@ class AdjustFrame(ttk.Frame):
     def on_items_changed(self) -> None:
         for r in self.item_rows:
             state = "normal" if r.enabled.get() else "disabled"
-            for e in (r.label_e, r.coef_e, r.offset_e):
+            for e in (r.label_e, r.coef_e):
                 e.configure(state=state)
         choices = self._graph_choices()
         for g in self.graph_rows:
@@ -616,6 +634,8 @@ class AdjustFrame(ttk.Frame):
         u, lg = self.intervals()
         if not u or not lg:
             errors.append("間隔が正しくありません。")
+        if None in self.offsets():
+            errors.append("時間オフセットが数値ではありません。")
 
         # 出力する項目
         elabel = self.elapsed_var.get().strip()
@@ -630,7 +650,7 @@ class AdjustFrame(ttk.Frame):
             errors.append("経過時間のラベルが空欄です。")
         for r in self.item_rows:
             if not r.enabled.get():
-                for e in (r.label_e, r.coef_e, r.offset_e):
+                for e in (r.label_e, r.coef_e):
                     e.configure(disabledbackground=DISABLED_BG)
                 continue
             lab = r.label.get().strip()
@@ -640,7 +660,7 @@ class AdjustFrame(ttk.Frame):
                 errors.append(f"{r.key}：ラベルが空欄です。")
             elif labels.get(lab, 0) > 1:
                 errors.append(f"{r.key}：ラベル「{lab}」が重複しています。")
-            for e, v, name in ((r.coef_e, r.coef, "係数"), (r.offset_e, r.offset, "オフセット")):
+            for e, v, name in ((r.coef_e, r.coef, "係数"),):
                 ok = _parse_float(v.get()) is not None
                 e.configure(bg=OK_BG if ok else ERR_BG)
                 if not ok:

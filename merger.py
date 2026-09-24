@@ -115,6 +115,7 @@ class MergeResult:
     rows: list[MergedRow]
     uart_based: bool  # True: UART基準（ロガーを間引き）、False: ロガー基準
     timeline: UartTimeline
+    uart_offset_ms: float = 0.0  # rows の t_ms に含まれる UART の時間オフセット
 
 
 def is_uart_based(uart_interval_ms: float, logger_interval_ms: float) -> bool:
@@ -127,7 +128,14 @@ def merge(
     uart_interval_ms: float,
     logger_interval_ms: float,
     timeline: UartTimeline | None = None,
+    uart_offset_ms: float = 0.0,
+    logger_offset_ms: float = 0.0,
 ) -> MergeResult:
+    """UART とロガーを時刻で対応付ける。
+
+    uart_offset_ms / logger_offset_ms：それぞれのデータ全体の時刻をずらす量（ms、＋で遅らせる）。
+    UART の各行は tU + uart_offset、ロガーの各行は (番号-1)×間隔 + logger_offset の時刻として扱う。
+    """
     if uart_interval_ms <= 0 or logger_interval_ms <= 0:
         raise ValueError("間隔は正の値にしてください。")
     if timeline is None:
@@ -141,19 +149,21 @@ def merge(
 
     rows: list[MergedRow] = []
     if is_uart_based(uart_interval_ms, logger_interval_ms):
-        for t, src in zip(timeline.t_ms, timeline.src):
-            li = round_half_up(t / logger_interval_ms)  # 0始まりの行番号
+        for t0, src in zip(timeline.t_ms, timeline.src):
+            t = t0 + uart_offset_ms
+            li = round_half_up((t - logger_offset_ms) / logger_interval_ms)  # 0始まりの行番号
             if li + 1 > max_num:
                 break  # ロガーのデータが尽きた
-            rows.append(MergedRow(t, src, num_to_idx.get(li + 1), src is None))
-        return MergeResult(rows, True, timeline)
+            logger_idx = num_to_idx.get(li + 1) if li >= 0 else None  # ロガーがまだ始まっていない
+            rows.append(MergedRow(t, src, logger_idx, src is None))
+        return MergeResult(rows, True, timeline, uart_offset_ms)
 
     # ロガー基準：各ロガー行に最も近い UART 行（欠落行を含む）を探す
     tol = uart_interval_ms * 0.5
-    ts = timeline.t_ms
+    ts = [t + uart_offset_ms for t in timeline.t_ms]
     end_t = ts[-1] + tol
     for idx, num in enumerate(logger.numbers):
-        t_l = (num - 1) * logger_interval_ms
+        t_l = (num - 1) * logger_interval_ms + logger_offset_ms
         if t_l > end_t:
             break  # UARTのデータが尽きた
         pos = bisect.bisect_left(ts, t_l)
@@ -167,7 +177,7 @@ def merge(
             rows.append(MergedRow(ts[best], src, idx, src is None))
         else:
             rows.append(MergedRow(t_l, None, idx, False))
-    return MergeResult(rows, False, timeline)
+    return MergeResult(rows, False, timeline, uart_offset_ms)
 
 
 def describe_mode(uart_interval_ms: float, logger_interval_ms: float) -> str:
@@ -205,7 +215,7 @@ def build_analysis_table(
     logger_items = [it for it in items if it.enabled and it.source == SOURCE_LOGGER and it.key in logger.values]
     # UART 行がない行（欠落補完行など）の elapsed_ms は、直前の実 UART 行から推定する
     tl = result.timeline
-    real_t = [t for t, s in zip(tl.t_ms, tl.src) if s is not None]
+    real_t = [t + result.uart_offset_ms for t, s in zip(tl.t_ms, tl.src) if s is not None]
     real_src = [s for s in tl.src if s is not None]
     has_em = ELAPSED_MS_COLUMN in uart.values
     out = []

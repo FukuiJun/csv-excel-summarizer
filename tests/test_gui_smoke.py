@@ -54,6 +54,17 @@ def test_screen2_flow(app, tmp_path):
     assert f.graph_rows[0].x_cb.get() == "time(ms)"
     assert "経過時間(s)" in f.graph_rows[0].x_cb.cget("values")
 
+    # 時間オフセット：ロガーを 1000ms 遅らせると、1行目はロガーなし・2行目にロガー1行目が対応する
+    f.logger_off.set("1000")
+    f.recalc()
+    assert f.result.rows[0].logger_idx is None and f.result.rows[1].logger_idx == 0
+    f.logger_off.set("abc")
+    f.recalc()
+    assert f.export_btn.instate(["disabled"])
+    f.logger_off.set("0")
+    f.recalc()
+    assert f.validate() == []
+
     # 間隔の入力エラーで出力ボタンが無効になる
     f.uart_int.set("0")
     f.recalc()
