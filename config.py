@@ -1,0 +1,283 @@
+"""設定ファイル config.json の読み書きと、前回設定の復元（仕様 2.1・2.2）。"""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+import sys
+from dataclasses import dataclass
+from datetime import datetime
+
+from logger_reader import LoggerData
+from models import SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
+from uart_reader import UartData
+
+CONFIG_FILENAME = "config.json"
+
+DEFAULT_UART_COLUMNS: dict[str, dict] = {
+    "t_ms": {"enabled": False, "label": "t_ms", "coef": 1, "offset": 0},
+    "elapsed_ms": {"enabled": True, "label": "time(ms)", "coef": 1, "offset": 0},
+    "voltage_mV": {"enabled": True, "label": "電圧(mV)", "coef": 1, "offset": 0},
+    "current_mA": {"enabled": True, "label": "電流(mA)", "coef": 1, "offset": 0},
+    "cap_mAh": {"enabled": True, "label": "CAP(mAh)", "coef": 1, "offset": 0},
+    "cap_max_mAh": {"enabled": False, "label": "CAP_MAX(mAh)", "coef": 1, "offset": 0},
+    "soc_percent": {"enabled": True, "label": "SOC(％)", "coef": 1, "offset": 0},
+    "soh_percent": {"enabled": False, "label": "SOH(％)", "coef": 1, "offset": 0},
+    "temp_C": {"enabled": True, "label": "温度(℃)", "coef": 1, "offset": 0},
+}
+
+DEFAULT_GRAPHS: list[dict] = [{"primary": "voltage_mV", "secondary": "current_mA"}]
+
+DEFAULT_CONFIG: dict = {
+    "uart_columns": DEFAULT_UART_COLUMNS,
+    "logger_channels": {},
+    "logger_label_format": "{ch}({unit})",
+    "elapsed_label": "経過時間(s)",
+    "graphs": DEFAULT_GRAPHS,
+    "last_dirs": {"uart": "", "logger": ""},
+    "output_filename_format": "解析_{start:%y%m%d-%H%M%S}.xlsx",
+    "row_warn_threshold": 100_000,
+    "row_limit": 1_000_000,
+}
+
+
+def default_config() -> dict:
+    return copy.deepcopy(DEFAULT_CONFIG)
+
+
+def app_dir() -> str:
+    """exe（または main.py）のあるフォルダ。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def default_config_path() -> str:
+    return os.path.join(app_dir(), CONFIG_FILENAME)
+
+
+# ---------------------------------------------------------------------------
+# 読み込み・保存
+# ---------------------------------------------------------------------------
+
+
+def _is_num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _clean_item(v, with_unit: bool) -> dict | None:
+    if not isinstance(v, dict):
+        return None
+    out = {
+        "enabled": bool(v.get("enabled", True)),
+        "label": str(v.get("label", "")),
+        "coef": v.get("coef", 1) if _is_num(v.get("coef", 1)) else 1,
+        "offset": v.get("offset", 0) if _is_num(v.get("offset", 0)) else 0,
+    }
+    if with_unit:
+        out["unit"] = str(v.get("unit", ""))
+    return out
+
+
+def _normalize(raw: dict) -> dict:
+    """読み込んだ内容を検査し、不正な項目は既定値に置き換える。"""
+    cfg = default_config()
+    if isinstance(raw.get("uart_columns"), dict):
+        cols = {}
+        for k, v in raw["uart_columns"].items():
+            c = _clean_item(v, with_unit=False)
+            if c is not None:
+                cols[str(k)] = c
+        cfg["uart_columns"] = cols
+    if isinstance(raw.get("logger_channels"), dict):
+        chs = {}
+        for k, v in raw["logger_channels"].items():
+            c = _clean_item(v, with_unit=True)
+            if c is not None:
+                chs[str(k)] = c
+        cfg["logger_channels"] = chs
+    for key in ("logger_label_format", "elapsed_label", "output_filename_format"):
+        if isinstance(raw.get(key), str) and raw[key]:
+            cfg[key] = raw[key]
+    if isinstance(raw.get("graphs"), list):
+        graphs = []
+        for g in raw["graphs"]:
+            if isinstance(g, dict):
+                p = g.get("primary")
+                s = g.get("secondary")
+                graphs.append(
+                    {
+                        "primary": p if isinstance(p, str) else None,
+                        "secondary": s if isinstance(s, str) else None,
+                    }
+                )
+        cfg["graphs"] = graphs
+    if isinstance(raw.get("last_dirs"), dict):
+        for k in ("uart", "logger"):
+            if isinstance(raw["last_dirs"].get(k), str):
+                cfg["last_dirs"][k] = raw["last_dirs"][k]
+    for key in ("row_warn_threshold", "row_limit"):
+        if _is_num(raw.get(key)) and raw[key] > 0:
+            cfg[key] = int(raw[key])
+    return cfg
+
+
+@dataclass
+class LoadResult:
+    config: dict
+    status: str  # "ok" / "missing" / "broken"
+    message: str = ""
+
+
+def load_config(path: str | None = None) -> LoadResult:
+    """config.json を読み込む。ない・壊れている場合は既定値で作り直す。"""
+    path = path or default_config_path()
+    status = "ok"
+    message = ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        if not isinstance(raw, dict):
+            raise ValueError("JSON の最上位がオブジェクトではありません")
+        return LoadResult(_normalize(raw), "ok")
+    except FileNotFoundError:
+        status = "missing"
+    except (OSError, ValueError) as e:  # json.JSONDecodeError は ValueError のサブクラス
+        status = "broken"
+        message = str(e)
+    cfg = default_config()
+    try:
+        save_config(cfg, path)
+    except OSError as e:
+        message = (message + " / " if message else "") + f"既定の設定ファイルを作成できませんでした: {e}"
+    return LoadResult(cfg, status, message)
+
+
+def save_config(cfg: dict, path: str | None = None) -> None:
+    path = path or default_config_path()
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------------------
+# 前回設定の復元
+# ---------------------------------------------------------------------------
+
+
+def default_uart_item(col: str) -> ItemSetting:
+    d = DEFAULT_UART_COLUMNS.get(col, {"enabled": True, "label": col, "coef": 1, "offset": 0})
+    return ItemSetting(col, SOURCE_UART, d["enabled"], d["label"], float(d["coef"]), float(d["offset"]))
+
+
+def logger_default_label(fmt: str, ch: str, unit: str) -> str:
+    try:
+        return fmt.format(ch=ch, unit=unit)
+    except (KeyError, IndexError, ValueError):
+        return f"{ch}({unit})"
+
+
+def default_logger_item(ch: str, unit: str, fmt: str) -> ItemSetting:
+    return ItemSetting(ch, SOURCE_LOGGER, True, logger_default_label(fmt, ch, unit), 1.0, 0.0, unit)
+
+
+def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool = True) -> tuple[list[ItemSetting], list[str]]:
+    """画面2の出力項目の初期値を作る。戻り値: (項目一覧, 警告メッセージ)"""
+    items: list[ItemSetting] = []
+    warnings: list[str] = []
+    saved_u = cfg.get("uart_columns", {}) if use_saved else {}
+    saved_l = cfg.get("logger_channels", {}) if use_saved else {}
+    fmt = cfg.get("logger_label_format") or DEFAULT_CONFIG["logger_label_format"]
+    if not use_saved:
+        fmt = DEFAULT_CONFIG["logger_label_format"]
+
+    for col in uart.columns:
+        s = saved_u.get(col)
+        if s:
+            items.append(ItemSetting(col, SOURCE_UART, s["enabled"], s["label"], float(s["coef"]), float(s["offset"])))
+        else:
+            items.append(default_uart_item(col))
+
+    for ch in logger.channels:
+        s = saved_l.get(ch.name)
+        if s:
+            items.append(
+                ItemSetting(ch.name, SOURCE_LOGGER, s["enabled"], s["label"], float(s["coef"]), float(s["offset"]), ch.unit)
+            )
+            if s.get("unit", "") != ch.unit:
+                warnings.append(
+                    f"{ch.name} の単位が前回と異なります（前回 [{s.get('unit', '')}] → 今回 [{ch.unit}]）。"
+                    "ラベル・係数を確認してください。"
+                )
+        else:
+            items.append(default_logger_item(ch.name, ch.unit, fmt))
+    return items, warnings
+
+
+def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True) -> list[GraphSetting]:
+    """グラフ設定の初期値。今回ない・採用されていない項目は未選択（None）にする。"""
+    src = cfg.get("graphs", DEFAULT_GRAPHS) if use_saved else DEFAULT_GRAPHS
+    enabled = {it.key for it in items if it.enabled}
+    graphs = []
+    for g in src:
+        p = g.get("primary")
+        s = g.get("secondary")
+        graphs.append(
+            GraphSetting(
+                primary=p if p in enabled else None,
+                # 第2軸は「なし」(None) と未選択を区別するため、無効なキーは "" にする
+                secondary=None if s is None else (s if s in enabled else ""),
+            )
+        )
+    return graphs
+
+
+def elapsed_label(cfg: dict, use_saved: bool = True) -> str:
+    if not use_saved:
+        return DEFAULT_CONFIG["elapsed_label"]
+    return cfg.get("elapsed_label") or DEFAULT_CONFIG["elapsed_label"]
+
+
+def apply_settings(
+    cfg: dict,
+    items: list[ItemSetting],
+    graphs: list[GraphSetting],
+    elapsed: str,
+    uart_dir: str | None = None,
+    logger_dir: str | None = None,
+) -> dict:
+    """出力成功時に保存する内容を cfg に反映した新しい dict を返す。
+
+    今回のCSVにない列・CHの設定は残す。
+    """
+    new = copy.deepcopy(cfg)
+    new.setdefault("uart_columns", {})
+    new.setdefault("logger_channels", {})
+    for it in items:
+        d = {"enabled": it.enabled, "label": it.label, "coef": it.coef, "offset": it.offset}
+        if it.source == SOURCE_UART:
+            new["uart_columns"][it.key] = d
+        else:
+            d["unit"] = it.unit
+            new["logger_channels"][it.key] = d
+    new["graphs"] = [{"primary": g.primary, "secondary": g.secondary or None} for g in graphs]
+    new["elapsed_label"] = elapsed
+    new.setdefault("last_dirs", {"uart": "", "logger": ""})
+    if uart_dir:
+        new["last_dirs"]["uart"] = uart_dir
+    if logger_dir:
+        new["last_dirs"]["logger"] = logger_dir
+    return new
+
+
+def make_output_filename(cfg: dict, start: datetime) -> str:
+    fmt = cfg.get("output_filename_format") or DEFAULT_CONFIG["output_filename_format"]
+    try:
+        name = fmt.format(start=start)
+    except (KeyError, IndexError, ValueError, AttributeError):
+        name = DEFAULT_CONFIG["output_filename_format"].format(start=start)
+    if not name.lower().endswith(".xlsx"):
+        name += ".xlsx"
+    return name

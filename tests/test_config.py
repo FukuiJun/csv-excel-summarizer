@@ -1,0 +1,184 @@
+import json
+import os
+
+import pytest
+
+import config as cfgmod
+import exporter
+from helpers import write_logger_csv, write_uart_csv
+from logger_reader import read_logger_csv
+from merger import build_analysis_table, merge
+from models import GraphSetting
+from uart_reader import read_uart_csv
+
+
+def _data(tmp_path, channels=None, name="l.CSV"):
+    u = read_uart_csv(write_uart_csv(str(tmp_path / "u.csv"), [i * 1000 for i in range(5)]))
+    lg = read_logger_csv(write_logger_csv(str(tmp_path / name), 30, channels=channels))
+    return u, lg
+
+
+def _export(tmp_path, cfg, cfg_path, u, lg, items, graphs, out_name="o.xlsx", elapsed="経過時間(s)"):
+    r = merge(u, lg, 1000, 200)
+    t = build_analysis_table(r, u, lg, items, elapsed)
+    return exporter.export(
+        str(tmp_path / out_name), t, u, lg, items, graphs, elapsed, cfg, cfg_path,
+        uart_dir=str(tmp_path), logger_dir=str(tmp_path),
+    )
+
+
+def test_missing_config_uses_defaults_and_recreates(tmp_path):
+    p = str(tmp_path / "config.json")
+    res = cfgmod.load_config(p)
+    assert res.status == "missing"
+    assert res.config == cfgmod.default_config()
+    with open(p, encoding="utf-8") as f:
+        assert json.load(f) == cfgmod.default_config()
+
+
+@pytest.mark.parametrize("content", ["{broken", "[1, 2]", ""])
+def test_broken_config_uses_defaults_and_recreates(tmp_path, content):
+    p = tmp_path / "config.json"
+    p.write_text(content, encoding="utf-8")
+    res = cfgmod.load_config(str(p))
+    assert res.status == "broken"
+    assert res.config == cfgmod.default_config()
+    assert json.loads(p.read_text(encoding="utf-8")) == cfgmod.default_config()
+
+
+def test_invalid_fields_fall_back(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"row_limit": "abc", "graphs": "x", "elapsed_label": "t(s)"}), encoding="utf-8")
+    cfg = cfgmod.load_config(str(p)).config
+    assert cfg["row_limit"] == 1_000_000
+    assert cfg["graphs"] == cfgmod.DEFAULT_GRAPHS
+    assert cfg["elapsed_label"] == "t(s)"
+
+
+def test_defaults_match_spec(tmp_path):
+    u, lg = _data(tmp_path)
+    items, warnings = cfgmod.build_items(cfgmod.default_config(), u, lg)
+    assert warnings == []
+    d = {it.key: (it.enabled, it.label, it.coef, it.offset) for it in items}
+    assert d["t_ms"] == (False, "t_ms", 1, 0)
+    assert d["elapsed_ms"] == (True, "time(ms)", 1, 0)
+    assert d["soc_percent"] == (True, "SOC(％)", 1, 0)
+    assert d["soh_percent"][0] is False
+    assert d["CH1"] == (True, "CH1(mV)", 1, 0)
+    assert d["CH2"] == (True, "CH2(V)", 1, 0)
+    graphs = cfgmod.build_graphs(cfgmod.default_config(), items)
+    assert graphs == [GraphSetting("voltage_mV", "current_mA")]
+
+
+def test_save_on_success_and_restore(tmp_path):
+    cfg_path = str(tmp_path / "config.json")
+    cfg = cfgmod.load_config(cfg_path).config
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    by = {it.key: it for it in items}
+    by["voltage_mV"].label = "電圧(V)"
+    by["voltage_mV"].coef = 0.001
+    by["t_ms"].enabled = True
+    by["CH1"].offset = -0.5
+    graphs = [GraphSetting("voltage_mV", "CH1"), GraphSetting("soc_percent", None)]
+    res = _export(tmp_path, cfg, cfg_path, u, lg, items, graphs, elapsed="秒")
+    assert res.config_error is None
+
+    cfg2 = cfgmod.load_config(cfg_path).config
+    items2, _ = cfgmod.build_items(cfg2, u, lg)
+    by2 = {it.key: it for it in items2}
+    assert (by2["voltage_mV"].label, by2["voltage_mV"].coef) == ("電圧(V)", 0.001)
+    assert by2["t_ms"].enabled is True
+    assert by2["CH1"].offset == -0.5
+    assert cfgmod.elapsed_label(cfg2) == "秒"
+    # ラベルを変更してもグラフ設定は元の列（キー）に対応したまま
+    assert cfgmod.build_graphs(cfg2, items2) == graphs
+    assert cfg2["graphs"][0] == {"primary": "voltage_mV", "secondary": "CH1"}
+    assert cfg2["last_dirs"] == {"uart": str(tmp_path), "logger": str(tmp_path)}
+
+
+def test_not_saved_on_failure(tmp_path):
+    cfg_path = str(tmp_path / "config.json")
+    cfg = cfgmod.load_config(cfg_path).config
+    before = open(cfg_path, encoding="utf-8").read()
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    items[0].label = "changed"
+    with pytest.raises(OSError):
+        _export(tmp_path, cfg, cfg_path, u, lg, items, [], out_name=os.path.join("no_such_dir", "o.xlsx"))
+    assert open(cfg_path, encoding="utf-8").read() == before
+
+
+def test_config_write_failure_is_reported_not_fatal(tmp_path):
+    cfg = cfgmod.default_config()
+    bad_path = str(tmp_path / "no_such_dir" / "config.json")
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    res = _export(tmp_path, cfg, bad_path, u, lg, items, [])
+    assert os.path.exists(tmp_path / "o.xlsx")
+    assert res.config_error
+
+
+def test_intervals_folder_filename_not_saved(tmp_path):
+    cfg_path = str(tmp_path / "config.json")
+    cfg = cfgmod.load_config(cfg_path).config
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    _export(tmp_path, cfg, cfg_path, u, lg, items, [])
+    saved = json.load(open(cfg_path, encoding="utf-8"))
+    # 間隔・出力先フォルダ・ファイル名の項目は保存されない（キーは既定と同じ）
+    assert set(saved) == set(cfgmod.DEFAULT_CONFIG)
+    assert saved["output_filename_format"] == cfgmod.DEFAULT_CONFIG["output_filename_format"]
+    # ファイル名は毎回 UART 1行目の時刻から生成される
+    assert cfgmod.make_output_filename(saved, u.timestamps[0]) == "解析_260924-090954.xlsx"
+
+
+def test_missing_channels_are_kept(tmp_path):
+    cfg_path = str(tmp_path / "config.json")
+    cfg = cfgmod.load_config(cfg_path).config
+    chs3 = [("CH1", "mV"), ("CH2", "V"), ("CH3", "V")]
+    u, lg3 = _data(tmp_path, chs3, "l3.CSV")
+    items, _ = cfgmod.build_items(cfg, u, lg3)
+    {it.key: it for it in items}["CH3"].label = "温度センサ"
+    res = _export(tmp_path, cfg, cfg_path, u, lg3, items, [])
+
+    _, lg1 = _data(tmp_path, [("CH1", "mV")], "l1.CSV")
+    items1, _ = cfgmod.build_items(res.config, u, lg1)
+    assert [it.key for it in items1 if it.source == "logger"] == ["CH1"]  # 画面には出さない
+    _export(tmp_path, res.config, cfg_path, u, lg1, items1, [], out_name="o2.xlsx")
+    saved = json.load(open(cfg_path, encoding="utf-8"))
+    assert saved["logger_channels"]["CH3"]["label"] == "温度センサ"
+
+
+def test_graph_item_missing_or_disabled_becomes_unselected(tmp_path):
+    u, lg = _data(tmp_path, [("CH1", "mV")])
+    cfg = cfgmod.default_config()
+    cfg["graphs"] = [{"primary": "CH5", "secondary": "voltage_mV"}, {"primary": "voltage_mV", "secondary": "t_ms"}]
+    items, _ = cfgmod.build_items(cfg, u, lg)  # t_ms は既定で採用なし
+    graphs = cfgmod.build_graphs(cfg, items)
+    assert graphs == [GraphSetting(None, "voltage_mV"), GraphSetting("voltage_mV", "")]
+
+
+def test_unit_change_warning(tmp_path):
+    cfg = cfgmod.default_config()
+    cfg["logger_channels"] = {"CH1": {"enabled": True, "label": "CH1(mV)", "coef": 1, "offset": 0, "unit": "mV"}}
+    u, lg = _data(tmp_path, [("CH1", "V")])
+    _, warnings = cfgmod.build_items(cfg, u, lg)
+    assert len(warnings) == 1 and "CH1" in warnings[0]
+    u, lg = _data(tmp_path, [("CH1", "mV")], "same.CSV")
+    assert cfgmod.build_items(cfg, u, lg)[1] == []
+
+
+def test_reset_to_defaults(tmp_path):
+    cfg = cfgmod.default_config()
+    cfg["uart_columns"]["voltage_mV"] = {"enabled": False, "label": "X", "coef": 2, "offset": 3}
+    cfg["logger_channels"] = {"CH1": {"enabled": False, "label": "Y", "coef": 2, "offset": 3, "unit": "mV"}}
+    cfg["graphs"] = []
+    cfg["elapsed_label"] = "t"
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg, use_saved=False)
+    by = {it.key: it for it in items}
+    assert (by["voltage_mV"].enabled, by["voltage_mV"].label, by["voltage_mV"].coef) == (True, "電圧(mV)", 1)
+    assert (by["CH1"].enabled, by["CH1"].label) == (True, "CH1(mV)")
+    assert cfgmod.build_graphs(cfg, items, use_saved=False) == [GraphSetting("voltage_mV", "current_mA")]
+    assert cfgmod.elapsed_label(cfg, use_saved=False) == "経過時間(s)"
