@@ -35,6 +35,7 @@ ERR_BG = "#ffc0c0"
 OK_BG = "white"
 DISABLED_BG = "#e8e8e8"
 NONE_LABEL = "なし"
+LABEL_WIDTH = 20  # ラベル入力欄の幅（文字数）
 CSV_TYPES = [("CSV ファイル", "*.csv *.CSV"), ("すべてのファイル", "*.*")]
 
 
@@ -63,7 +64,7 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_TITLE)
         self.geometry("920x860")
-        self.minsize(760, 600)
+        self.minsize(480, 320)
 
         style = ttk.Style(self)
         style.map("Error.TCombobox", fieldbackground=[("readonly", ERR_BG), ("!disabled", ERR_BG)])
@@ -185,32 +186,63 @@ class FileSelectFrame(ttk.Frame):
 
 
 class ScrollableFrame(ttk.Frame):
-    def __init__(self, parent, height: int = 240):
-        super().__init__(parent)
-        self.canvas = tk.Canvas(self, height=height, highlightthickness=0)
-        vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.inner = ttk.Frame(self.canvas)
-        self.inner.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self._win, width=e.width))
-        self.canvas.configure(yscrollcommand=vsb.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        vsb.pack(side="right", fill="y")
-        self.canvas.bind("<Enter>", lambda e: self._bind_wheel(True))
-        self.canvas.bind("<Leave>", lambda e: self._bind_wheel(False))
+    """縦スクロールできる領域。マウスホイールは、この領域が表示されている間はどこの上でも効く。"""
 
-    def _bind_wheel(self, on: bool) -> None:
-        if on:
-            self.canvas.bind_all("<MouseWheel>", self._on_wheel)
-            self.canvas.bind_all("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"))
-            self.canvas.bind_all("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"))
-        else:
-            self.canvas.unbind_all("<MouseWheel>")
-            self.canvas.unbind_all("<Button-4>")
-            self.canvas.unbind_all("<Button-5>")
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.canvas = tk.Canvas(self, highlightthickness=0)
+        self.vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.inner = ttk.Frame(self.canvas)
+        self.inner.bind("<Configure>", lambda e: self._update_region())
+        self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.vsb.pack(side="right", fill="y")
+
+        top = self.winfo_toplevel()
+        top.bind_all("<MouseWheel>", self._on_wheel, add="+")
+        top.bind_all("<Button-4>", self._on_wheel, add="+")
+        top.bind_all("<Button-5>", self._on_wheel, add="+")
+        # コンボボックス上のホイールで選択値が変わらないようにし、画面のスクロールだけ行う
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            top.bind_class("TCombobox", seq, lambda e: (self._on_wheel(e), "break")[1])
+        self.bind("<Destroy>", self._on_destroy)
+
+    def _on_canvas_configure(self, e) -> None:
+        self.canvas.itemconfigure(self._win, width=e.width)
+        self._update_region()
+
+    def _update_region(self) -> None:
+        h = max(self.inner.winfo_reqheight(), self.canvas.winfo_height())
+        self.canvas.configure(scrollregion=(0, 0, self.inner.winfo_reqwidth(), h))
+
+    def _can_scroll(self) -> bool:
+        return self.inner.winfo_reqheight() > self.canvas.winfo_height()
 
     def _on_wheel(self, e) -> None:
-        self.canvas.yview_scroll(int(-e.delta / 120) or (-1 if e.delta > 0 else 1), "units")
+        if not self.winfo_exists() or not self.winfo_ismapped() or not self._can_scroll():
+            return
+        w = e.widget
+        if isinstance(w, str) or not str(w).startswith(str(self.winfo_toplevel())) or "popdown" in str(w):
+            return  # ダイアログやコンボボックスのドロップダウン上では何もしない
+        if w.winfo_toplevel() is not self.winfo_toplevel():
+            return
+        if getattr(e, "num", None) == 4:
+            step = -1
+        elif getattr(e, "num", None) == 5:
+            step = 1
+        else:
+            step = int(-e.delta / 120) or (-1 if e.delta > 0 else 1)
+        self.canvas.yview_scroll(step * 2, "units")
+
+    def _on_destroy(self, e) -> None:
+        if e.widget is not self:
+            return
+        top = self.winfo_toplevel()
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            top.unbind_all(seq)
+            top.unbind_class("TCombobox", seq)
 
 
 class ItemRow:
@@ -229,8 +261,8 @@ class ItemRow:
         self.check = ttk.Checkbutton(parent, variable=self.enabled)
         self.check.grid(row=row, column=0, padx=4)
         ttk.Label(parent, text=name).grid(row=row, column=1, sticky="w", padx=4)
-        self.label_e = tk.Entry(parent, textvariable=self.label, width=22)
-        self.label_e.grid(row=row, column=2, sticky="ew", padx=4, pady=1)
+        self.label_e = tk.Entry(parent, textvariable=self.label, width=LABEL_WIDTH)
+        self.label_e.grid(row=row, column=2, sticky="w", padx=4, pady=1)
         self.coef_e = tk.Entry(parent, textvariable=self.coef, width=10)
         self.coef_e.grid(row=row, column=3, padx=4)
         self.offset_e = tk.Entry(parent, textvariable=self.offset, width=10)
@@ -333,6 +365,13 @@ class AdjustFrame(ttk.Frame):
         graphs = cfgmod.build_graphs(app.cfg, items)
         self.elapsed_var = tk.StringVar(value=cfgmod.elapsed_label(app.cfg))
 
+        # エラー表示とボタンは常に見えるよう下に固定し、それ以外をスクロール領域に入れる
+        self._build_bottom_bar()
+        self.page = ScrollableFrame(self)
+        self.page.pack(fill="both", expand=True)
+        self.body = self.page.inner
+        self.body.configure(padding=(0, 0, 8, 0))
+
         self._build_result_section()
         self._build_interval_section()
         self._build_items_section()
@@ -344,7 +383,7 @@ class AdjustFrame(ttk.Frame):
 
     # ---- 読み込み結果 ------------------------------------------------------
     def _build_result_section(self) -> None:
-        box = ttk.LabelFrame(self, text="読み込み結果", padding=6)
+        box = ttk.LabelFrame(self.body, text="読み込み結果", padding=6)
         box.pack(fill="x")
         u = self.uart
         self.uart_info = ttk.Label(box)
@@ -369,7 +408,7 @@ class AdjustFrame(ttk.Frame):
 
     # ---- 間隔 --------------------------------------------------------------
     def _build_interval_section(self) -> None:
-        box = ttk.LabelFrame(self, text="間隔", padding=6)
+        box = ttk.LabelFrame(self.body, text="間隔", padding=6)
         box.pack(fill="x", pady=(6, 0))
         line = ttk.Frame(box)
         line.pack(anchor="w")
@@ -391,17 +430,17 @@ class AdjustFrame(ttk.Frame):
 
     # ---- 出力する項目 ------------------------------------------------------
     def _build_items_section(self) -> None:
-        box = ttk.LabelFrame(self, text="出力する項目", padding=6)
-        box.pack(fill="both", expand=True, pady=(6, 0))
-        self.items_sf = ScrollableFrame(box, height=230)
-        self.items_sf.pack(fill="both", expand=True)
+        box = ttk.LabelFrame(self.body, text="出力する項目", padding=6)
+        box.pack(fill="x", pady=(6, 0))
+        self.items_inner = ttk.Frame(box)
+        self.items_inner.pack(fill="x")
 
     def set_items(self, items: list[ItemSetting], graphs: list[GraphSetting]) -> None:
-        inner = self.items_sf.inner
+        inner = self.items_inner
         for w in inner.winfo_children():
             w.destroy()
         self.item_rows = []
-        inner.columnconfigure(2, weight=1)
+        inner.columnconfigure(5, weight=1)  # 余白は右端に寄せ、ラベル欄は伸ばさない
         for c, text in enumerate(["採用", "元の列名", "ラベル", "係数", "オフセット"]):
             ttk.Label(inner, text=text, font=("", 9, "bold")).grid(row=0, column=c, sticky="w", padx=4)
 
@@ -409,8 +448,8 @@ class AdjustFrame(ttk.Frame):
         fixed.state(["!alternate", "selected", "disabled"])
         fixed.grid(row=1, column=0)
         ttk.Label(inner, text="経過時間(s)").grid(row=1, column=1, sticky="w", padx=4)
-        self.elapsed_e = tk.Entry(inner, textvariable=self.elapsed_var, width=22)
-        self.elapsed_e.grid(row=1, column=2, sticky="ew", padx=4, pady=1)
+        self.elapsed_e = tk.Entry(inner, textvariable=self.elapsed_var, width=LABEL_WIDTH)
+        self.elapsed_e.grid(row=1, column=2, sticky="w", padx=4, pady=1)
         ttk.Label(inner, text="―").grid(row=1, column=3)
         ttk.Label(inner, text="―").grid(row=1, column=4)
         if not getattr(self, "_elapsed_traced", False):
@@ -435,7 +474,7 @@ class AdjustFrame(ttk.Frame):
 
     # ---- グラフ ------------------------------------------------------------
     def _build_graph_section(self) -> None:
-        box = ttk.LabelFrame(self, text="グラフ", padding=6)
+        box = ttk.LabelFrame(self.body, text="グラフ", padding=6)
         box.pack(fill="x", pady=(6, 0))
         self.graph_inner = ttk.Frame(box)
         self.graph_inner.pack(anchor="w")
@@ -465,7 +504,7 @@ class AdjustFrame(ttk.Frame):
 
     # ---- 出力先・ボタン ----------------------------------------------------
     def _build_output_section(self) -> None:
-        box = ttk.LabelFrame(self, text="出力先", padding=6)
+        box = ttk.LabelFrame(self.body, text="出力先", padding=6)
         box.pack(fill="x", pady=(6, 0))
         box.columnconfigure(1, weight=1)
         self.folder = tk.StringVar(value=os.path.dirname(os.path.abspath(self.uart.path)))
@@ -480,11 +519,11 @@ class AdjustFrame(ttk.Frame):
         self.folder.trace_add("write", lambda *_: self.validate())
         self.filename.trace_add("write", lambda *_: self.validate())
 
-        self.error_label = tk.Label(self, fg="#c00000", justify="left", anchor="w", wraplength=880)
-        self.error_label.pack(fill="x", pady=(4, 0))
-
+    def _build_bottom_bar(self) -> None:
         btns = ttk.Frame(self)
-        btns.pack(fill="x", pady=(4, 0))
+        btns.pack(side="bottom", fill="x", pady=(4, 0))
+        self.error_label = tk.Label(self, fg="#c00000", justify="left", anchor="w", wraplength=880)
+        self.error_label.pack(side="bottom", fill="x", pady=(4, 0))
         self.reset_btn = ttk.Button(btns, text="初期値に戻す", command=self.reset_defaults)
         self.reset_btn.pack(side="left")
         self.export_btn = ttk.Button(btns, text="Excelに出力", command=self.export)

@@ -108,3 +108,23 @@ def test_screen2_flow(app, tmp_path):
     app.show_select()
     assert app.adjust_frame is None and app.uart_path.get() == path
     assert os.path.exists(path)
+
+
+def test_label_entry_does_not_stretch_and_page_scrolls(app):
+    app.deiconify()
+    app.geometry("900x400")
+    f = _load(app)
+    app.update()
+    label_e = f.item_rows[0].label_e
+    assert label_e.winfo_width() < 300  # ウィンドウ幅に合わせて伸びない
+
+    # 小さいウィンドウでもボタンは常に見えている
+    assert f.export_btn.winfo_ismapped()
+    # ホイールで画面全体が下にスクロールする（Entry の上でも効く）
+    top_before = f.page.canvas.yview()[0]
+    ev = type("E", (), {"widget": label_e, "num": 5, "delta": 0})()
+    for _ in range(20):
+        f.page._on_wheel(ev)
+    app.update()
+    assert f.page.canvas.yview()[0] > top_before
+    assert f.page.canvas.yview()[1] == pytest.approx(1.0)  # 一番下（出力先）まで届く
