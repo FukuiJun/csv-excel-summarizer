@@ -1,0 +1,328 @@
+{
+  "app": "ロガーCSV・UART CSV 統合ツール (LogMerger)",
+  "toolkit": "Python tkinter/ttk + sv-ttk (Sun Valley light)",
+  "window": {
+    "initial_size": [
+      920,
+      860
+    ],
+    "min_size": [
+      480,
+      320
+    ],
+    "resizable": true
+  },
+  "screens": [
+    {
+      "id": "file_select",
+      "title": "画面1：ファイル選択",
+      "screenshot": "screenshots/01_file_select.png",
+      "sections": [
+        {
+          "title": "ファイル選択",
+          "type": "LabelFrame",
+          "children": [
+            {
+              "type": "Label",
+              "text": "UART CSV"
+            },
+            {
+              "type": "Entry",
+              "bind": "uart_path",
+              "drop_target": true
+            },
+            {
+              "type": "Button",
+              "text": "参照",
+              "action": "ファイル選択ダイアログ(.csv)"
+            },
+            {
+              "type": "Label",
+              "text": "ロガー CSV"
+            },
+            {
+              "type": "Entry",
+              "bind": "logger_path",
+              "drop_target": true
+            },
+            {
+              "type": "Button",
+              "text": "参照",
+              "action": "ファイル選択ダイアログ(.csv)"
+            },
+            {
+              "type": "Label",
+              "style": "hint(gray)",
+              "text": "CSV ファイルをこの枠にドラッグ＆ドロップできます（2つ同時も可。中身から UART／ロガーを自動判別）"
+            },
+            {
+              "type": "Button",
+              "text": "読み込み",
+              "states": [
+                "disabled: 2つのパスがそろうまで"
+              ],
+              "action": "CSVを解析して画面2へ。失敗時はエラーメッセージ"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "adjust",
+      "title": "画面2：出力内容の調整",
+      "screenshots": [
+        "screenshots/02_adjust_normal.png",
+        "screenshots/03_adjust_errors.png",
+        "screenshots/04_adjust_gap_10ch.png",
+        "screenshots/05_adjust_small_window.png"
+      ],
+      "layout": "縦スクロール領域（セクション1〜5）＋下部固定フッター",
+      "sections": [
+        {
+          "title": "読み込み結果",
+          "type": "LabelFrame",
+          "children": [
+            {
+              "type": "Label",
+              "example": "UART : 8行  09:09:54〜09:10:01  スキップ0行 / 重複0行"
+            },
+            {
+              "type": "Label",
+              "example": "ロガー: GL240  36行  2CH  測定間隔 200ms"
+            },
+            {
+              "type": "Label",
+              "example": "欠落なし | ⚠ 欠落：1箇所（2行を空欄で補完）",
+              "states": [
+                "warning color when gaps"
+              ]
+            },
+            {
+              "type": "Button",
+              "text": "詳細",
+              "visible_when": "欠落あり",
+              "action": "欠落の詳細ウィンドウ"
+            },
+            {
+              "type": "Label",
+              "repeat": "ロガー単位の変更ごと",
+              "style": "warning",
+              "example": "⚠ CH1 の単位が前回と異なります（前回 [mV] → 今回 [V]）。ラベル・係数を確認してください。"
+            }
+          ]
+        },
+        {
+          "title": "間隔・時間オフセット",
+          "type": "LabelFrame",
+          "children": [
+            {
+              "type": "Entry",
+              "label": "UART間隔",
+              "unit": "ms",
+              "default": "CSVから推定(例 1000)",
+              "validation": "正の数"
+            },
+            {
+              "type": "Entry",
+              "label": "ロガー間隔",
+              "unit": "ms",
+              "default": "CSVヘッダ(例 200)",
+              "validation": "正の数"
+            },
+            {
+              "type": "Entry",
+              "label": "時間オフセット UART",
+              "unit": "ms",
+              "default": "0",
+              "validation": "数値"
+            },
+            {
+              "type": "Entry",
+              "label": "時間オフセット ロガー",
+              "unit": "ms",
+              "default": "0",
+              "validation": "数値"
+            },
+            {
+              "type": "Label",
+              "text": "（＋で遅らせる。例：ロガーの変化が1秒早いときはロガーに 1000）"
+            },
+            {
+              "type": "Label",
+              "role": "結果表示",
+              "example": "→ UART基準・ロガーを時刻で間引き（約5行ごと） / 出力予定 8行",
+              "states": [
+                "normal",
+                "warning(>100,000行: 黄背景 #fff3a0)",
+                "error(>1,000,000行: 赤背景 #ffc0c0)",
+                "input error: 間隔を正の数値で入力してください。"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "出力する項目",
+          "type": "LabelFrame(table)",
+          "columns": [
+            "採用(Checkbutton)",
+            "元の列名(Label)",
+            "ラベル(Entry, 20文字幅)",
+            "係数(Entry)",
+            "グラフの色(色見本Button→カラーパレット)"
+          ],
+          "rows": [
+            {
+              "fixed": true,
+              "name": "経過時間(s)",
+              "checkbox": "常にON・変更不可",
+              "coef": "―",
+              "color": "―"
+            },
+            {
+              "group": "UART",
+              "names": [
+                "t_ms",
+                "elapsed_ms",
+                "voltage_mV",
+                "current_mA",
+                "cap_mAh",
+                "cap_max_mAh",
+                "soc_percent",
+                "soh_percent",
+                "temp_C"
+              ]
+            },
+            {
+              "separator": "── ロガー ──"
+            },
+            {
+              "group": "ロガー",
+              "names": "CH1 (mV) 〜 CH10 (V)（1〜10行、CSVによる）"
+            }
+          ],
+          "states": [
+            "採用OFFの行: ラベル・係数・色ボタンが無効(グレー)",
+            "ラベル空欄/重複・係数が数値でない: 入力欄が赤(invalid)"
+          ]
+        },
+        {
+          "title": "グラフ",
+          "type": "LabelFrame(table)",
+          "columns": [
+            "No",
+            "横軸(Combobox)",
+            "第1軸1(Combobox, 必須)",
+            "第1軸2(Combobox, 「なし」を選べる)",
+            "第2軸1(Combobox, 「なし」を選べる)",
+            "第2軸2(Combobox, 「なし」を選べる)",
+            "削除(Button)"
+          ],
+          "footer": [
+            {
+              "type": "Button",
+              "text": "＋グラフを追加"
+            }
+          ],
+          "choices": "採用中の項目のラベル（横軸は＋「経過時間(s)」）",
+          "states": [
+            "未選択・採用外・同じ項目の重複: プルダウンが赤(invalid)"
+          ],
+          "rows": "0〜数個"
+        },
+        {
+          "title": "出力先",
+          "type": "LabelFrame",
+          "children": [
+            {
+              "type": "Entry",
+              "label": "フォルダ",
+              "default": "UART CSV のフォルダ",
+              "validation": "存在するフォルダ"
+            },
+            {
+              "type": "Button",
+              "text": "参照",
+              "action": "フォルダ選択"
+            },
+            {
+              "type": "Entry",
+              "label": "ファイル名",
+              "default": "解析_<UART先頭時刻 yymmdd-HHMMSS>.xlsx",
+              "validation": "\\ / : * ? \" < > | を含まない"
+            }
+          ]
+        }
+      ],
+      "footer": {
+        "fixed": true,
+        "children": [
+          {
+            "type": "Label",
+            "role": "エラー一覧",
+            "style": "error color",
+            "max_lines": 6
+          },
+          {
+            "type": "Button",
+            "text": "初期値に戻す",
+            "align": "left",
+            "action": "確認後、項目・グラフを既定値に"
+          },
+          {
+            "type": "Button",
+            "text": "戻る",
+            "align": "right",
+            "action": "画面1へ（パス保持）"
+          },
+          {
+            "type": "Button",
+            "text": "Excelに出力",
+            "align": "right",
+            "primary": true,
+            "states": [
+              "disabled: エラーがある間／出力中"
+            ],
+            "action": "上書き確認→行数確認→出力中ダイアログ→完了ダイアログ"
+          }
+        ]
+      }
+    }
+  ],
+  "dialogs": [
+    {
+      "id": "color_palette",
+      "screenshot": "screenshots/06_color_palette.png",
+      "content": "テーマの色 10×6、標準の色 10、［その他の色…］",
+      "close": "色クリック / Esc"
+    },
+    {
+      "id": "gap_detail",
+      "screenshot": "screenshots/07_gap_detail.png",
+      "content": "Treeview: No / 欠落直前の行 / 欠落直後の行 / 補完行数"
+    },
+    {
+      "id": "progress",
+      "screenshot": "screenshots/08_progress.png",
+      "content": "メッセージ＋不確定プログレスバー、閉じられない"
+    },
+    {
+      "id": "done",
+      "screenshot": "screenshots/09_done.png",
+      "content": "完了メッセージ＋［フォルダを開く］［OK］"
+    },
+    {
+      "id": "message_boxes",
+      "content": "Windows標準: 上書き確認、行数警告(続行/キャンセル)、読み込みエラー、保存失敗、初期値に戻す確認、想定外エラー"
+    }
+  ],
+  "colors": {
+    "background": "#fafafa",
+    "text": "#1c1c1c",
+    "disabled_text": "#a0a0a0",
+    "accent": "#005fb8",
+    "error": "#c42b1c",
+    "warning": "#9d5d00",
+    "row_warning_bg": "#fff3a0",
+    "row_error_bg": "#ffc0c0"
+  }
+}
