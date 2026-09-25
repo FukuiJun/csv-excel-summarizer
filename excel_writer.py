@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 
 from logger_reader import LoggerData
 from merger import AnalysisTable
-from models import ELAPSED_KEY, GraphSetting, ItemSetting
+from models import ELAPSED_KEY, TIME_UNITS, GraphSetting, ItemSetting
 from uart_reader import TIMESTAMP_COLUMN, UartData, parse_timestamp
 
 SHEET_ANALYSIS = "解析"
@@ -117,9 +117,44 @@ def _write_logger_raw(ws, logger: LoggerData, progress: ProgressFn | None) -> No
             progress(f"ロガーの元データを書き込み中… {n:,}/{total:,} 行")
 
 
-def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData, progress: ProgressFn | None) -> dict:
-    """解析シートを書き、グラフ作成用に 項目キー -> 列番号 を返す。"""
-    n_uart_cols = 1 + len(table.uart_items)
+def time_unit_label(label: str, unit: str) -> str:
+    """換算列の見出し：末尾の「(単位)」を置き換える（なければ付け足す）。例 time(ms) → time(min)"""
+    if re.search(r"\([^()]*\)\s*$", label):
+        return re.sub(r"\([^()]*\)\s*$", f"({unit})", label)
+    return f"{label}({unit})"
+
+
+def needed_time_columns(graphs: list[GraphSetting]) -> set[tuple[str, str]]:
+    """グラフの横軸に使う時間の換算列 (元のキー, 単位) の一覧。"""
+    return {(g.x, g.effective_x_unit()) for g in graphs if g.effective_x_unit()}
+
+
+def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData, progress: ProgressFn | None,
+                    time_cols: set[tuple[str, str]] = frozenset()) -> tuple[dict, dict]:
+    """解析シートを書き、グラフ作成用に (項目キー -> 列番号, 換算列のキー -> 見出し) を返す。
+
+    time_cols の換算列（例 ("elapsed_ms", "min")）は元の列のすぐ右に入れる。キーは "elapsed_ms@min"。
+    """
+    # UART ブロックの列：(キー, 見出し, 値を取り出す関数(行番号, 行))
+    def unit_cols(key: str, label: str, to_ms):
+        cols = []
+        for u in TIME_UNITS:
+            if (key, u) in time_cols:
+                f = TIME_UNITS[u]
+                cols.append((f"{key}@{u}", time_unit_label(label, u),
+                             lambda n, row, g=to_ms, f=f: None if g(n, row) is None else round(g(n, row) / f, 9)))
+        return cols
+
+    specs = [(ELAPSED_KEY, table.elapsed_label, lambda n, row: row[0])]
+    specs += unit_cols(ELAPSED_KEY, table.elapsed_label, lambda n, row: row[0] * 1000)
+    raw = table.elapsed_ms_raw
+    for i, it in enumerate(table.uart_items):
+        specs.append((it.key, it.label, lambda n, row, i=i: row[1][i]))
+        if it.key == "elapsed_ms":
+            specs += unit_cols(it.key, it.label, lambda n, row: raw[n] if n < len(raw) else None)
+    extra_labels = {k: lab for k, lab, _ in specs if "@" in k[1:]}
+
+    n_uart_cols = len(specs)
     logger_start = n_uart_cols + 2  # 1列空ける
     total_cols = n_uart_cols + (1 + len(table.logger_items) if table.logger_items else 0)
 
@@ -173,7 +208,7 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     ws.append(row5)
 
     row6: list = [None] * total_cols
-    labels6 = [table.elapsed_label] + [it.label for it in table.uart_items]
+    labels6 = [lab for _, lab, _ in specs]
     for i, lab in enumerate(labels6):
         row6[i] = styled(lab, 1 + i, fill=HEADER_FILL, top=True)
     for i, it in enumerate(table.logger_items):
@@ -181,17 +216,18 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     ws.append(row6)
 
     col_of: dict[str, int] = {}
-    for i, it in enumerate(table.uart_items):
-        col_of[it.key] = 2 + i
+    for i, (k, _, _) in enumerate(specs):
+        col_of[k] = 1 + i
     for i, it in enumerate(table.logger_items):
         col_of.setdefault(it.key, logger_start + i)
 
     total = len(table.rows)
-    for n, (sec, uv, lv, is_gap) in enumerate(table.rows):
+    getters = [g for _, _, g in specs]
+    for n, row in enumerate(table.rows):
+        sec, uv, lv, is_gap = row
         vals: list = [None] * total_cols
-        vals[0] = sec
-        for i, v in enumerate(uv):
-            vals[1 + i] = v
+        for i, g in enumerate(getters):
+            vals[i] = g(n, row)
         for i, v in enumerate(lv):
             vals[logger_start - 1 + i] = v
         is_last = n == total - 1
@@ -204,7 +240,7 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
         ws.append(vals)
         if progress and n % 20000 == 0 and n:
             progress(f"解析シートを書き込み中… {n:,}/{total:,} 行")
-    return col_of
+    return col_of, extra_labels
 
 
 def _series(ref_y, ref_x, label: str, color: str) -> Series:
@@ -216,20 +252,24 @@ def _series(ref_y, ref_x, label: str, color: str) -> Series:
     return s
 
 
-def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], col_of: dict[str, int]) -> None:
+def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], col_of: dict[str, int],
+                extra_labels: dict[str, str] | None = None) -> None:
     """グラフシートに散布図を並べる。データは解析シート(ws_data)のセル範囲を参照する。"""
     first = DATA_START_ROW
     last = DATA_START_ROW + len(table.rows) - 1
     items = {it.key: it for it in table.uart_items + table.logger_items}
     labels = {k: it.label for k, it in items.items()}
     labels[ELAPSED_KEY] = table.elapsed_label
-    col_of = {**col_of, ELAPSED_KEY: 1}
+    labels.update(extra_labels or {})
+    col_of = {ELAPSED_KEY: 1, **col_of}
 
     def ref(col: int):
         return Reference(ws_data, min_col=col, min_row=first, max_row=last)
 
     for gi, g in enumerate(graphs):
         x_key = g.x or ELAPSED_KEY
+        if g.effective_x_unit():
+            x_key = f"{x_key}@{g.effective_x_unit()}"  # 時間の単位を換算した列
         xref = ref(col_of[x_key])
         prim = [k for k in g.primary if k]
         sec = [k for k in g.secondary if k]
@@ -332,12 +372,12 @@ def write_workbook(
         progress("解析シートを書き込み中…")
     ws_a = wb.create_sheet(sanitize_sheet_name(SHEET_ANALYSIS, used))
     ws_a.sheet_properties.tabColor = TAB_COLOR_ANALYSIS
-    col_of = _write_analysis(ws_a, table, uart, logger, progress)
+    col_of, extra_labels = _write_analysis(ws_a, table, uart, logger, progress, needed_time_columns(graphs))
 
     if graphs:
         ws_g = wb.create_sheet(sanitize_sheet_name(SHEET_GRAPH, used))
         ws_g.sheet_properties.tabColor = TAB_COLOR_GRAPH
-        _add_charts(ws_g, ws_a, table, graphs, col_of)
+        _add_charts(ws_g, ws_a, table, graphs, col_of, extra_labels)
 
     if progress:
         progress("UART の元データを書き込み中…")

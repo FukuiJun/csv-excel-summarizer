@@ -35,7 +35,16 @@ from merger import (
     max_sheet_rows,
     merge,
 )
-from models import ELAPSED_KEY, MAX_SERIES_PER_AXIS, SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
+from models import (
+    ELAPSED_KEY,
+    MAX_SERIES_PER_AXIS,
+    SOURCE_LOGGER,
+    SOURCE_UART,
+    TIME_KEYS,
+    TIME_UNITS,
+    GraphSetting,
+    ItemSetting,
+)
 from uart_reader import UartData
 
 NONE_LABEL = "なし"
@@ -206,6 +215,7 @@ class GraphRow:
         self.cbs: list[ttk.Combobox] = [None] * len(self.KINDS)  # type: ignore[list-item]
         gap = th.px(T.SIZE["table_col_gap"])
         for r, (name, sub, idxs) in enumerate(rows):
+            r = r if r == 0 else r + 1  # 横軸の下に「単位」の行を入れる
             lf = frame(grid, th, "panel")
             lf.grid(row=r, column=0, sticky="w", pady=(0 if r == 0 else th.px(8), 0))
             label(lf, th, name, bg="panel").pack(side="left")
@@ -218,6 +228,27 @@ class GraphRow:
                         pady=(0 if r == 0 else th.px(8), 0))
                 self.cbs[i] = cb
         self._keys: list[list[str | None]] = [[] for _ in self.KINDS]
+
+        # 横軸の時間の単位（横軸が時間の項目のときだけ選べる）
+        self.unit_label = label(grid, th, "　横軸の単位", font="caption", fg="text2", bg="panel")
+        self.unit_label.grid(row=1, column=0, sticky="w", pady=(th.px(4), 0))
+        unit_box = frame(grid, th, "panel")
+        unit_box.grid(row=1, column=1, columnspan=2, sticky="w", pady=(th.px(4), 0))
+        self.x_unit = tk.StringVar(value=graph.x_unit or TIME_KEYS.get(graph.x or "", "ms"))
+        self.unit_radios = []
+        for u in TIME_UNITS:
+            rb = ttk.Radiobutton(unit_box, text=u, value=u, variable=self.x_unit, style="panel.TRadiobutton",
+                                 command=self.frame.validate)
+            rb.pack(side="left", padx=(0, th.px(14)))
+            self.unit_radios.append(rb)
+        self._update_unit_state()
+
+    def _update_unit_state(self) -> None:
+        """横軸が時間の項目（elapsed_ms・経過時間(s)）のときだけ単位を選べる。"""
+        native = TIME_KEYS.get(self.x or "")
+        for rb in self.unit_radios:
+            rb.state(["!disabled"] if native else ["disabled"])
+        self.th.paint(self.unit_label, fg="text2" if native else "disabled")
 
     # 互換用の参照
     @property
@@ -265,12 +296,18 @@ class GraphRow:
             cb.configure(values=[lab for _, lab in opts])
             v = self.values[n]
             cb.set(opts[okeys.index(v)][1] if (v in okeys and (v is not None or kind == "opt")) else "")
+        if hasattr(self, "unit_radios"):
+            self._update_unit_state()
 
     def _on_select(self) -> None:
+        old_x = self.x
         for n, cb in enumerate(self.cbs):
             i = cb.current()
             if i >= 0:
                 self.values[n] = self._keys[n][i]
+        if self.x != old_x and TIME_KEYS.get(self.x or "") and TIME_KEYS.get(old_x or "") is None:
+            self.x_unit.set(TIME_KEYS[self.x])  # 時間以外 → 時間の項目に変えたときは元の単位から
+        self._update_unit_state()
         self.frame.validate()
 
     def set_errors(self, errs: list[bool], reason: str = "") -> None:
@@ -279,7 +316,8 @@ class GraphRow:
         self.reason.configure(text=("⚠ " + reason) if reason else "")
 
     def to_setting(self) -> GraphSetting:
-        return GraphSetting(list(self.primary), list(self.secondary), self.x)
+        unit = self.x_unit.get() if TIME_KEYS.get(self.x or "") else None
+        return GraphSetting(list(self.primary), list(self.secondary), self.x, unit)
 
 
 # ---------------------------------------------------------------------------

@@ -327,3 +327,23 @@ def test_color_palette_opens_next_to_swatch(app):
         assert px >= app.winfo_rootx() - 1 and px + pw <= app.winfo_rootx() + app.winfo_width() + 1
         pal.close()
         app.update()
+
+
+def test_graph_x_unit_radio(app):
+    f = _load(app)
+    g = f.graph_rows[0]
+    assert g.x == "elapsed_ms" and g.x_unit.get() == "ms"
+    assert not g.unit_radios[0].instate(["disabled"])
+    g.x_unit.set("min")
+    assert g.to_setting().x_unit == "min" and g.to_setting().effective_x_unit() == "min"
+    # 横軸を時間以外（電圧）にすると単位は選べない
+    labels = list(g.x_cb.cget("values"))
+    g.x_cb.current(labels.index("電圧(mV)"))
+    g.cbs[1].current(list(g.cbs[1].cget("values")).index("電流(mA)"))
+    g._on_select()
+    assert all(rb.instate(["disabled"]) for rb in g.unit_radios)
+    assert g.to_setting().x_unit is None
+    # 経過時間(s) にすると選べるようになり、元の単位 s から
+    g.x_cb.current(labels.index("経過時間(s)"))
+    g._on_select()
+    assert not g.unit_radios[0].instate(["disabled"]) and g.x_unit.get() == "s"

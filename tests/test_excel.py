@@ -195,3 +195,55 @@ def test_analysis_sheet_styles_and_tab_colors(tmp_path):
     assert ws[f"C{last - 1}"].border.bottom.style == "thin"
     # 欠落行も格子付きで灰色
     assert ws["B10"].fill.fgColor.rgb.endswith("D9D9D9") and ws["B10"].border.left.style == "thin"
+
+
+def test_time_unit_columns_for_graph_x_axis(tmp_path):
+    u, lg, r = _setup(tmp_path, gaps=True)
+    cfg = cfgmod.default_config()
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    t = build_analysis_table(r, u, lg, items, "経過時間(s)")
+    graphs = [
+        GraphSetting(["voltage_mV"], [None], "elapsed_ms", "min"),  # time(ms) → time(min)
+        GraphSetting(["current_mA"], [None], "elapsed_ms", "min"),  # 同じ単位は列 1 つ
+        GraphSetting(["CH1"], [None], ELAPSED_KEY, "h"),  # 経過時間(s) → 経過時間(h)
+        GraphSetting(["CH2"], [None], "elapsed_ms", "ms"),  # 元と同じ単位 → 列を足さない
+    ]
+    out = str(tmp_path / "o.xlsx")
+    write_workbook(out, t, u, lg, graphs)
+    ws = openpyxl.load_workbook(out)["解析"]
+    heads = [c.value for c in ws[6]]
+    # A 経過時間(s)、B 経過時間(h)、C time(ms)、D time(min)、以降は元どおり
+    assert heads[:5] == ["経過時間(s)", "経過時間(h)", "time(ms)", "time(min)", "電圧(mV)"]
+    assert heads.count("time(min)") == 1
+    for row in range(7, 7 + len(r.rows)):
+        ms = ws[f"C{row}"].value
+        assert ws[f"D{row}"].value == pytest.approx(ms / 60000)
+        assert ws[f"B{row}"].value == pytest.approx(ws[f"A{row}"].value / 3600, abs=1e-6)
+    # 欠落行（10 行目）の換算値もある
+    assert ws["D10"].value is not None and ws["D10"].fill.fgColor.rgb.endswith("D9D9D9")
+
+    import zipfile
+
+    last = 6 + len(r.rows)
+    with zipfile.ZipFile(out) as z:
+        c1 = z.read("xl/charts/chart1.xml").decode().replace(" />", "/>")
+        c3 = z.read("xl/charts/chart3.xml").decode().replace(" />", "/>")
+        c4 = z.read("xl/charts/chart4.xml").decode().replace(" />", "/>")
+    assert f"<xVal><numRef><f>'解析'!$D$7:$D${last}</f>" in c1 and "time(min)" in c1
+    assert f"<xVal><numRef><f>'解析'!$B$7:$B${last}</f>" in c3 and "経過時間(h)" in c3
+    assert f"<xVal><numRef><f>'解析'!$C$7:$C${last}</f>" in c4
+
+
+def test_time_unit_label():
+    from excel_writer import time_unit_label
+
+    assert time_unit_label("time(ms)", "min") == "time(min)"
+    assert time_unit_label("経過時間(s)", "h") == "経過時間(h)"
+    assert time_unit_label("time", "s") == "time(s)"
+
+
+def test_effective_x_unit():
+    assert GraphSetting(["a"], [None], "elapsed_ms", "min").effective_x_unit() == "min"
+    assert GraphSetting(["a"], [None], "elapsed_ms", "ms").effective_x_unit() is None
+    assert GraphSetting(["a"], [None], "voltage_mV", "min").effective_x_unit() is None  # 時間の項目でない
+    assert GraphSetting(["a"], [None], ELAPSED_KEY, "min").effective_x_unit() == "min"

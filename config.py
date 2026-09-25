@@ -15,6 +15,7 @@ from models import (
     ELAPSED_KEY,
     SOURCE_LOGGER,
     SOURCE_UART,
+    TIME_UNITS,
     GraphSetting,
     ItemSetting,
     default_color,
@@ -126,9 +127,11 @@ def _normalize(raw: dict) -> dict:
         for g in raw["graphs"]:
             if isinstance(g, dict):
                 x = g.get("x", DEFAULT_X_KEY)  # 横軸の設定がない古い config.json は初期値
+                xu = g.get("x_unit")
                 graphs.append(
                     {
                         "x": x if isinstance(x, str) else None,
+                        "x_unit": xu if xu in TIME_UNITS else None,
                         "primary": _clean_keys(g.get("primary")),
                         "secondary": _clean_keys(g.get("secondary")),
                     }
@@ -253,7 +256,9 @@ def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True) ->
         # 「なし」(None) と未選択を区別するため、今回使えないキーは "" にする
         prim = [None if k is None else (k if k in enabled else "") for k in _clean_keys(g.get("primary"))]
         sec = [None if k is None else (k if k in enabled else "") for k in _clean_keys(g.get("secondary"))]
-        g2 = GraphSetting(prim, sec, x if (x == ELAPSED_KEY or x in enabled) else None)
+        xu = g.get("x_unit")
+        g2 = GraphSetting(prim, sec, x if (x == ELAPSED_KEY or x in enabled) else None,
+                          xu if xu in TIME_UNITS else None)
         if not g2.primary[0]:
             g2.primary[0] = None  # 第1軸の1つ目は必須：未選択は None
         graphs.append(g2)
@@ -289,7 +294,8 @@ def apply_settings(
             d["unit"] = it.unit
             new["logger_channels"][it.key] = d
     new["graphs"] = [
-        {"x": g.x, "primary": [k or None for k in g.primary], "secondary": [k or None for k in g.secondary]}
+        {"x": g.x, "x_unit": g.x_unit, "primary": [k or None for k in g.primary],
+         "secondary": [k or None for k in g.secondary]}
         for g in graphs
     ]
     new["elapsed_label"] = elapsed

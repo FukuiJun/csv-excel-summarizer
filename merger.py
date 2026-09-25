@@ -202,6 +202,7 @@ class AnalysisTable:
     logger_items: list[ItemSetting]
     rows: list[tuple[float, list[float | None], list[float | None], bool]]
     # 各行: (経過秒数, UART値, ロガー値, 欠落行か)
+    elapsed_ms_raw: list[float | None] = field(default_factory=list)  # 各行の係数前の elapsed_ms（時間単位の換算列用）
 
 
 def build_analysis_table(
@@ -219,24 +220,28 @@ def build_analysis_table(
     real_src = [s for s in tl.src if s is not None]
     has_em = ELAPSED_MS_COLUMN in uart.values
     out = []
+    em_raw: list[float | None] = []
     for r in result.rows:
         sec = round(r.t_ms / 1000.0, 3)
         if r.uart_idx is None:
             uv = [None] * len(uart_items)
+            est = None
             if has_em and real_t:
                 p = max(bisect.bisect_right(real_t, r.t_ms) - 1, 0)
                 est = round(uart.values[ELAPSED_MS_COLUMN][real_src[p]] + (r.t_ms - real_t[p]), 3)
                 for i, it in enumerate(uart_items):
                     if it.key == ELAPSED_MS_COLUMN:
                         uv[i] = it.convert(est)
+            em_raw.append(est)
         else:
             uv = [it.convert(uart.values[it.key][r.uart_idx]) for it in uart_items]
+            em_raw.append(uart.values[ELAPSED_MS_COLUMN][r.uart_idx] if has_em else None)
         if r.logger_idx is None:
             lv = [None] * len(logger_items)
         else:
             lv = [it.convert(logger.values[it.key][r.logger_idx]) for it in logger_items]
         out.append((sec, uv, lv, r.is_gap))
-    return AnalysisTable(elapsed_label, uart_items, logger_items, out)
+    return AnalysisTable(elapsed_label, uart_items, logger_items, out, em_raw)
 
 
 # ---------------------------------------------------------------------------

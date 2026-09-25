@@ -95,7 +95,7 @@ def test_save_on_success_and_restore(tmp_path):
     assert cfgmod.elapsed_label(cfg2) == "秒"
     # ラベルを変更してもグラフ設定は元の列（キー）に対応したまま
     assert cfgmod.build_graphs(cfg2, items2) == graphs
-    assert cfg2["graphs"][0] == {"x": "elapsed_ms", "primary": ["voltage_mV", None], "secondary": ["CH1", None]}
+    assert cfg2["graphs"][0] == {"x": "elapsed_ms", "x_unit": None, "primary": ["voltage_mV", None], "secondary": ["CH1", None]}
     assert cfg2["last_dirs"] == {"uart": str(tmp_path), "logger": str(tmp_path)}
 
 
@@ -254,3 +254,15 @@ def test_old_graph_format_is_read(tmp_path):
     u, lg = _data(tmp_path)
     items, _ = cfgmod.build_items(cfg, u, lg)
     assert cfgmod.build_graphs(cfg, items) == [GraphSetting(["voltage_mV", None], ["current_mA", None])]
+
+
+def test_graph_x_unit_save_restore(tmp_path):
+    u, lg = _data(tmp_path)
+    cfg = cfgmod.default_config()
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    assert cfgmod.build_graphs(cfg, items)[0].x_unit is None  # 既定は元の単位
+    new = cfgmod.apply_settings(cfg, items, [GraphSetting(["voltage_mV"], [None], "elapsed_ms", "min")], "経過時間(s)")
+    assert cfgmod.build_graphs(new, items)[0].x_unit == "min"
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"graphs": [{"x": "elapsed_ms", "x_unit": "day", "primary": ["voltage_mV"]}]}), encoding="utf-8")
+    assert cfgmod.build_graphs(cfgmod.load_config(str(p)).config, items)[0].x_unit is None  # 不正な単位

@@ -11,6 +11,9 @@ SOURCE_LOGGER = "logger"
 ELAPSED_KEY = "@elapsed"
 # グラフ横軸の初期値
 DEFAULT_X_KEY = "elapsed_ms"
+# グラフ横軸の時間の単位（ms に対する倍率）と、時間の項目の元の単位
+TIME_UNITS = {"ms": 1, "s": 1000, "min": 60_000, "h": 3_600_000}
+TIME_KEYS = {"elapsed_ms": "ms", ELAPSED_KEY: "s"}
 # グラフ1つの縦軸1本あたりに載せられる系列数
 MAX_SERIES_PER_AXIS = 2
 
@@ -61,6 +64,14 @@ class GraphSetting:
     primary: list[str | None]
     secondary: list[str | None]
     x: str | None = DEFAULT_X_KEY
+    x_unit: str | None = None  # 横軸の時間の単位（ms/s/min/h）。None は元の単位のまま
+
+    def effective_x_unit(self) -> str | None:
+        """横軸に換算列を使う場合の単位（横軸が時間の項目で、元と違う単位のときだけ）。"""
+        native = TIME_KEYS.get(self.x or "")
+        if native and self.x_unit in TIME_UNITS and self.x_unit != native:
+            return self.x_unit
+        return None
 
     def __post_init__(self) -> None:
         self.primary = _pad(self.primary)

@@ -133,6 +133,7 @@ class Theme:
         for surf in SURFACES:
             bg = self.c[surf]
             s.configure(f"{surf}.TCheckbutton", background=bg)
+            s.configure(f"{surf}.TRadiobutton", background=bg)
             s.configure(f"{surf}.TFrame", background=bg)
         s.configure("Error.TCombobox", font=f["body"])
 
