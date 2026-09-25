@@ -290,3 +290,28 @@ def test_window_icon(app):
 
     assert os.path.exists(gui.resource_path("assets", "LogMerger.ico"))
     assert app.icon_set  # アイコンを設定できた
+
+
+def test_color_palette_opens_next_to_swatch(app):
+    app.deiconify()
+    app.geometry("1120x720+0+0")
+    f = _load(app)
+    app.update()
+    for r in (f.item_rows[1], f.item_rows[-1]):  # 上の方の行・一番下の行
+        f.items_area.see(r.color_btn)
+        app.update()
+        r.color_btn.invoke()
+        app.update()
+        pal = r._palette
+        btn = r.color_btn
+        bx, by, bh = btn.winfo_rootx(), btn.winfo_rooty(), btn.winfo_height()
+        px, py = pal.winfo_rootx(), pal.winfo_rooty()
+        ph, pw = pal.winfo_height(), pal.winfo_width()
+        # 色見本のすぐ下か、すぐ上に出る
+        assert abs(py - (by + bh + 2)) <= 4 or abs((py + ph) - (by - 2)) <= 4, (py, ph, by)
+        # 横方向は色見本と重なる位置（離れた場所に出ない）
+        assert px <= bx + btn.winfo_width() and px + pw >= bx
+        # アプリのウィンドウの中に収まる
+        assert px >= app.winfo_rootx() - 1 and px + pw <= app.winfo_rootx() + app.winfo_width() + 1
+        pal.close()
+        app.update()

@@ -112,21 +112,44 @@ class ColorPalette(tk.Toplevel):
             self._swatch(g3, col, current, 0, c)
         ttk.Button(body, text="その他の色…", command=self._more).pack(fill="x", pady=(th.px(10), 0))
 
-        # 色見本の真下に表示（画面からはみ出す場合は内側に寄せる）
-        self.update_idletasks()
-        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
-        x = min(anchor.winfo_rootx(), self.winfo_screenwidth() - w - 8)
-        y = anchor.winfo_rooty() + anchor.winfo_height() + 2
-        if y + h > self.winfo_screenheight() - 48:
-            y = max(0, anchor.winfo_rooty() - h - 2)
-        self.geometry(f"+{max(0, x)}+{y}")
+        # クリックした色見本の真下に表示する（位置の計算は _place）
+        self._place()
         self.bind("<Escape>", lambda e: self.close())
         self.bind("<Button-1>", self._click_outside, add="+")
         self._set_anchor_highlight(True)
         self.deiconify()
+        self._place()  # Windows では表示前の位置指定が効かないことがあるため、表示後にもう一度
+        self.after_idle(self._place)
         self.lift()
         self.focus_force()
         _grab_later(self)
+
+    def popup_position(self) -> tuple[int, int]:
+        """色見本の真下（入らなければ真上）。アプリのウィンドウからはみ出す分は内側に寄せる。
+
+        モニターが複数ある場合もあるので、画面（プライマリモニター）の範囲ではなく
+        アプリのウィンドウを基準にする（座標が負の値になることもある）。
+        """
+        a = self._anchor
+        self.update_idletasks()
+        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+        top = a.winfo_toplevel()
+        left, right = top.winfo_rootx(), top.winfo_rootx() + top.winfo_width()
+        upper, lower = top.winfo_rooty(), top.winfo_rooty() + top.winfo_height()
+        x = a.winfo_rootx()
+        if x + w > right:
+            x = max(left, a.winfo_rootx() + a.winfo_width() - w)  # 色見本の右端にそろえる
+        y = a.winfo_rooty() + a.winfo_height() + 2
+        if y + h > lower and a.winfo_rooty() - h - 2 >= upper:
+            y = a.winfo_rooty() - h - 2  # 下に入らなければ上に出す
+        elif y + h > lower:
+            y = max(upper, lower - h)  # 上にも入らなければウィンドウの下端にそろえる
+        return x, y
+
+    def _place(self) -> None:
+        if self.winfo_exists():
+            x, y = self.popup_position()
+            self.geometry(f"{self.winfo_reqwidth()}x{self.winfo_reqheight()}{x:+d}{y:+d}")
 
     @staticmethod
     def _shade(hex_color: str, f: float) -> str:
