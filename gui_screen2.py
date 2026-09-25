@@ -37,6 +37,7 @@ from merger import (
     merge,
 )
 from models import (
+    DEFAULT_X_KEY,
     ELAPSED_KEY,
     MAX_SERIES_PER_AXIS,
     SOURCE_LOGGER,
@@ -754,11 +755,24 @@ class AdjustFrame(tk.Frame):
             g.place(i)
 
     def add_graph(self) -> None:
-        g = GraphRow(self, GraphSetting([None], [None]))  # 横軸は初期値（elapsed_ms）
+        g = GraphRow(self, self._default_new_graph())
         self.graph_rows.append(g)
         self._regrid_graphs()
         g.refresh(self._graph_choices(), self.elapsed_var.get().strip())
         self.validate()
+
+    def _default_new_graph(self) -> GraphSetting:
+        """追加するグラフの初期値。未選択のエラーを出さないよう、第1軸に項目を入れておく。
+
+        横軸は elapsed_ms（採用していなければ経過時間(s)）。第1軸は横軸以外で、
+        まだどのグラフにも使っていない項目を優先して選ぶ。
+        """
+        keys = [k for k, _ in self._graph_choices()]
+        x = DEFAULT_X_KEY if DEFAULT_X_KEY in keys else ELAPSED_KEY
+        cands = [k for k in keys if k != x]
+        used = {k for g in self.graph_rows for k in g.to_setting().series_keys()}
+        first = next((k for k in cands if k not in used), cands[0] if cands else None)
+        return GraphSetting([first], [None], x)
 
     def remove_graph(self, g: GraphRow) -> None:
         g.destroy()

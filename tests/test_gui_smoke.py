@@ -402,3 +402,23 @@ def test_graph_x_unit_radio(app):
     g.x_cb.current(labels.index("経過時間(s)"))
     g._on_select()
     assert not g.unit_radios[0].instate(["disabled"]) and g.x_unit.get() == "s"
+
+
+@pytest.mark.parametrize("only", [None, "logger"])
+def test_add_graph_preselects_axis(app, only):
+    if only == "logger":
+        app.uart_path.set("")
+    f = _load(app)
+    before = {k for g in f.graph_rows for k in g.to_setting().series_keys()}
+    f.add_graph()
+    app.update()
+    g = f.graph_rows[-1]
+    assert g.primary[0] and g.primary[0] != g.x  # 第1軸に項目が選ばれている
+    unused = [k for k, _ in f._graph_choices() if k not in before and k != g.x]
+    if unused:  # まだ使っていない項目を優先
+        assert g.primary[0] == unused[0]
+    assert f.validate() == [] and not f.export_btn.instate(["disabled"])
+    for _ in range(5):  # 何回追加してもエラーにならない
+        f.add_graph()
+    app.update()
+    assert all(r.primary[0] for r in f.graph_rows) and f.validate() == []
