@@ -177,18 +177,21 @@ def test_analysis_sheet_styles_and_tab_colors(tmp_path):
     ws = wb["解析"]
     # A〜G: UART（経過時間 + 6項目）、H: 空列、I〜J: ロガー
     assert ws["A5"].font.b and ws["I5"].font.b
+    # 見出し行：薄い緑。罫線は格子（細線）、ブロックの外周は中太線
     for col in "ABCDEFGIJ":
         c = ws[f"{col}6"]
         assert c.fill.fgColor.rgb.endswith("E2EFDA"), col
-        assert c.border.left.style == c.border.right.style == c.border.top.style == c.border.bottom.style == "thin"
-    assert ws["H6"].fill.fill_type is None
-    # データ部はブロックの外枠だけ
-    assert ws["A7"].border.left.style == "thin" and (ws["A7"].border.right is None or ws["A7"].border.right.style is None)
-    assert ws["G7"].border.right.style == "thin"
-    assert ws["I7"].border.left.style == "thin" and ws["J7"].border.right.style == "thin"
-    assert ws["C7"].border.left.style is None and ws["H7"].border.left.style is None
+        assert c.border.top.style == "medium" and c.border.bottom.style == "thin", col
+    assert ws["H6"].fill.fill_type is None and ws["H6"].border.left.style is None
+    # データ部：全セルに細線の格子、外周（A列左・G列右・I列左・J列右・最終行下）は中太線
+    assert ws["A7"].border.left.style == "medium" and ws["A7"].border.right.style == "thin"
+    assert ws["C7"].border.left.style == "thin" and ws["C7"].border.top.style == "thin"
+    assert ws["G7"].border.right.style == "medium"
+    assert ws["I7"].border.left.style == "medium" and ws["J7"].border.right.style == "medium"
+    assert ws["H7"].border.left.style is None and ws["H7"].border.bottom.style is None
     last = 6 + len(r.rows)
     for col in "ACGIJ":
-        assert ws[f"{col}{last}"].border.bottom.style == "thin", col
-    assert ws[f"H{last}"].border.bottom.style is None
-    assert ws[f"C{last - 1}"].border.bottom.style is None
+        assert ws[f"{col}{last}"].border.bottom.style == "medium", col
+    assert ws[f"C{last - 1}"].border.bottom.style == "thin"
+    # 欠落行も格子付きで灰色
+    assert ws["B10"].fill.fgColor.rgb.endswith("D9D9D9") and ws["B10"].border.left.style == "thin"

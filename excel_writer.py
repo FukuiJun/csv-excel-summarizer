@@ -29,6 +29,7 @@ GAP_FILL = PatternFill("solid", fgColor="D9D9D9")
 HEADER_FILL = PatternFill("solid", fgColor="E2EFDA")  # 見出し行（薄い緑）
 TITLE_FONT = Font(bold=True, size=12)
 THIN = Side(style="thin", color="000000")
+MEDIUM = Side(style="medium", color="000000")  # 表（UART・ロガー）の外周
 # シート見出し（タブ）の色
 TAB_COLOR_ANALYSIS = "A9D08E"  # 緑
 TAB_COLOR_GRAPH = "F4B084"  # オレンジ
@@ -139,38 +140,44 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     logger_cols = range(logger_start, total_cols + 1) if table.logger_items else range(0)
     blocks = [uart_cols] + ([logger_cols] if table.logger_items else [])
 
-    def styled(value, col: int, *, font=None, fill=None, border_all=False, bottom=False):
+    block_of = {c: b for b in blocks for c in b}
+    _borders: dict = {}
+
+    def grid_border(col: int, top: bool = False, bottom: bool = False) -> Border:
+        """表の罫線：セルごとに細線の格子、ブロック（UART・ロガー）の外周は中太線。"""
+        key = (col, top, bottom)
+        if key not in _borders:
+            b = block_of[col]
+            _borders[key] = Border(
+                left=MEDIUM if col == b.start else THIN,
+                right=MEDIUM if col == b.stop - 1 else THIN,
+                top=MEDIUM if top else THIN,
+                bottom=MEDIUM if bottom else THIN,
+            )
+        return _borders[key]
+
+    def styled(value, col: int, *, font=None, fill=None, top=False, bottom=False, grid=True):
         c = WriteOnlyCell(ws, value=value)
         if font is not None:
             c.font = font
         if fill is not None:
             c.fill = fill
-        if border_all:
-            c.border = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-        else:
-            # データ部は各ブロック（UART・ロガー）の外枠だけ線を引く
-            left = right = None
-            for b in blocks:
-                if col == b.start:
-                    left = THIN
-                if col == b.stop - 1:
-                    right = THIN
-            if left or right or bottom:
-                c.border = Border(left=left, right=right, bottom=THIN if bottom else None)
+        if grid and col in block_of:
+            c.border = grid_border(col, top, bottom)
         return c
 
     row5 = [None] * total_cols
-    row5[0] = styled("マイコン内部データ(UART)", 1, font=TITLE_FONT)
+    row5[0] = styled("マイコン内部データ(UART)", 1, font=TITLE_FONT, grid=False)
     if table.logger_items:
-        row5[logger_start - 1] = styled("測定値", logger_start, font=TITLE_FONT)
+        row5[logger_start - 1] = styled("測定値", logger_start, font=TITLE_FONT, grid=False)
     ws.append(row5)
 
     row6: list = [None] * total_cols
     labels6 = [table.elapsed_label] + [it.label for it in table.uart_items]
     for i, lab in enumerate(labels6):
-        row6[i] = styled(lab, 1 + i, fill=HEADER_FILL, border_all=True)
+        row6[i] = styled(lab, 1 + i, fill=HEADER_FILL, top=True)
     for i, it in enumerate(table.logger_items):
-        row6[logger_start - 1 + i] = styled(it.label, logger_start + i, fill=HEADER_FILL, border_all=True)
+        row6[logger_start - 1 + i] = styled(it.label, logger_start + i, fill=HEADER_FILL, top=True)
     ws.append(row6)
 
     col_of: dict[str, int] = {}
@@ -179,8 +186,6 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     for i, it in enumerate(table.logger_items):
         col_of.setdefault(it.key, logger_start + i)
 
-    edge_cols = {c for b in blocks for c in (b.start, b.stop - 1)}
-    in_block = set(uart_cols) | set(logger_cols)
     total = len(table.rows)
     for n, (sec, uv, lv, is_gap) in enumerate(table.rows):
         vals: list = [None] * total_cols
@@ -193,8 +198,8 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
         for idx in range(total_cols):
             col = idx + 1
             if is_gap:
-                vals[idx] = styled(vals[idx], col, fill=GAP_FILL, bottom=is_last and col in in_block)
-            elif col in edge_cols or (is_last and col in in_block):
+                vals[idx] = styled(vals[idx], col, fill=GAP_FILL, bottom=is_last)
+            elif col in block_of:
                 vals[idx] = styled(vals[idx], col, bottom=is_last)
         ws.append(vals)
         if progress and n % 20000 == 0 and n:
