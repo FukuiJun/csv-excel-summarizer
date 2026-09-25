@@ -9,7 +9,7 @@ GRAPHTEC GL240（データロガー）の CSV と、マイコンから UART 経�
 ## 動作環境
 
 - Windows（Python 3.10 以上。exe 版は Python 不要）
-- ライブラリ：openpyxl、tkinter（Python 標準）
+- ライブラリ：openpyxl、tkinter（Python 標準）、sv-ttk（画面のテーマ）
 
 ## 使い方
 
@@ -48,8 +48,8 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
 |---|---|
 | 読み込み結果 | 行数・時刻・スキップ行数・重複行数・欠落の警告。［詳細］で欠落箇所の一覧 |
 | 間隔・時間オフセット | UART間隔（初期値：`pc_timestamp` の差の中央値を100ms単位に丸めた値）とロガー間隔（初期値：ヘッダの測定間隔）。時間オフセットは UART 全体・ロガー全体の時刻をずらす量（ms、＋で遅らせる、初期値 0、保存しない）。例：ロガーの変化が UART より1秒早く出るときはロガーに 1000。変更するとその場で再計算します |
-| 出力する項目 | 採用・ラベル・係数。出力値は `元の値 × 係数` |
-| グラフ | 1行1グラフ。横軸（初期値 elapsed_ms、経過時間(s) も選べる）・第1軸（左）は必須、第2軸（右）は「なし」も可。0個ならグラフシートを作りません |
+| 出力する項目 | 採用・ラベル・係数・グラフの色。出力値は `元の値 × 係数`。色の見本をクリックするとカラーパレットが開き、色を選べます（「その他の色…」で任意の色） |
+| グラフ | 1行1グラフ。横軸（初期値 elapsed_ms、経過時間(s) も選べる）、第1軸（左）・第2軸（右）にそれぞれ2つまで項目を載せられる。第1軸の1つ目は必須、それ以外は「なし」も可。同じ項目は1つのグラフで1回まで。0個ならグラフシートを作りません |
 | 出力先 | 初期値は UART CSV のフォルダと `解析_<UART 1行目の時刻>.xlsx` |
 
 入力にエラーがある欄は赤くなり、画面下にエラー内容が表示され、［Excelに出力］は押せなくなります。
@@ -85,17 +85,17 @@ UTF-8 で保存してください。
 ```json
 {
   "uart_columns": {
-    "voltage_mV": {"enabled": true, "label": "電圧(V)", "coef": 0.001},
+    "voltage_mV": {"enabled": true, "label": "電圧(V)", "coef": 0.001, "color": "4472C4"},
     "t_ms":       {"enabled": false, "label": "t_ms", "coef": 1}
   },
   "logger_channels": {
-    "CH1": {"enabled": true, "label": "CH1(mV)", "coef": 1, "unit": "mV"}
+    "CH1": {"enabled": true, "label": "CH1(mV)", "coef": 1, "color": "A5A5A5", "unit": "mV"}
   },
   "logger_label_format": "{ch}({unit})",
   "elapsed_label": "経過時間(s)",
   "graphs": [
-    {"x": "elapsed_ms", "primary": "voltage_mV", "secondary": "current_mA"},
-    {"x": "@elapsed", "primary": "soc_percent", "secondary": null}
+    {"x": "elapsed_ms", "primary": ["voltage_mV", "CH2"], "secondary": ["current_mA", null]},
+    {"x": "@elapsed", "primary": ["soc_percent", null], "secondary": [null, null]}
   ],
   "last_dirs": {"uart": "C:\\data\\uart", "logger": "C:\\data\\logger"},
   "output_filename_format": "解析_{start:%y%m%d-%H%M%S}.xlsx",
@@ -106,11 +106,11 @@ UTF-8 で保存してください。
 
 | キー | 内容 |
 |---|---|
-| `uart_columns` | UART の列ごと（キーは CSV の元の列名）の 採用・ラベル・係数 |
+| `uart_columns` | UART の列ごと（キーは CSV の元の列名）の 採用・ラベル・係数・グラフの色（`RRGGBB`） |
 | `logger_channels` | ロガーの CH ごと（キーは `CH1` など）の設定と、前回の単位 `unit`。単位が前回と違うと画面2に警告が出ます |
 | `logger_label_format` | 設定がない CH のラベルの書式。`{ch}` が CH 番号、`{unit}` が単位に置き換わります |
 | `elapsed_label` | 経過時間(s)列のラベル |
-| `graphs` | グラフの一覧。横軸 `x`・第1軸 `primary`・第2軸 `secondary` は列名・CH 番号で指定（`secondary` の `null` は「なし」、`x` の `"@elapsed"` は経過時間(s)。`x` を省略すると `elapsed_ms`） |
+| `graphs` | グラフの一覧。横軸 `x`・第1軸 `primary`・第2軸 `secondary` は列名・CH 番号で指定（縦軸は2つまでのリストで `null` は「なし」、`x` の `"@elapsed"` は経過時間(s)。`x` を省略すると `elapsed_ms`） |
 | `last_dirs` | ［参照］ダイアログで最初に開くフォルダ |
 | `output_filename_format` | 出力ファイル名の書式。`{start:...}` に UART 1 行目の時刻が入ります（`%y%m%d` などは Python の strftime 書式） |
 | `row_warn_threshold` / `row_limit` | 行数の警告しきい値 / 上限 |
@@ -124,7 +124,7 @@ UTF-8 で保存してください。
 
 ```
 pip install -r requirements-dev.txt
-pyinstaller --noconfirm --clean --onedir --windowed --name LogMerger main.py
+pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --name LogMerger main.py
 ```
 
 （`build.bat` を実行しても同じです）

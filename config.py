@@ -10,7 +10,16 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from logger_reader import LoggerData
-from models import DEFAULT_X_KEY, ELAPSED_KEY, SOURCE_LOGGER, SOURCE_UART, GraphSetting, ItemSetting
+from models import (
+    DEFAULT_X_KEY,
+    ELAPSED_KEY,
+    SOURCE_LOGGER,
+    SOURCE_UART,
+    GraphSetting,
+    ItemSetting,
+    default_color,
+    is_color,
+)
 from uart_reader import UartData
 
 CONFIG_FILENAME = "config.json"
@@ -27,7 +36,7 @@ DEFAULT_UART_COLUMNS: dict[str, dict] = {
     "temp_C": {"enabled": True, "label": "温度(℃)", "coef": 1},
 }
 
-DEFAULT_GRAPHS: list[dict] = [{"x": DEFAULT_X_KEY, "primary": "voltage_mV", "secondary": "current_mA"}]
+DEFAULT_GRAPHS: list[dict] = [{"x": DEFAULT_X_KEY, "primary": ["voltage_mV", None], "secondary": ["current_mA", None]}]
 
 DEFAULT_CONFIG: dict = {
     "uart_columns": DEFAULT_UART_COLUMNS,
@@ -66,6 +75,15 @@ def _is_num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def _clean_keys(v) -> list[str | None]:
+    """グラフの軸の設定を「キーのリスト」にそろえる（旧形式の文字列・null も受け付ける）。"""
+    if v is None or isinstance(v, str):
+        v = [v]
+    if not isinstance(v, list):
+        return []
+    return [k if isinstance(k, str) and k else None for k in v]
+
+
 def _clean_item(v, with_unit: bool) -> dict | None:
     if not isinstance(v, dict):
         return None
@@ -74,6 +92,8 @@ def _clean_item(v, with_unit: bool) -> dict | None:
         "label": str(v.get("label", "")),
         "coef": v.get("coef", 1) if _is_num(v.get("coef", 1)) else 1,
     }
+    if is_color(v.get("color")):
+        out["color"] = v["color"].upper()
     if with_unit:
         out["unit"] = str(v.get("unit", ""))
     return out
@@ -103,14 +123,12 @@ def _normalize(raw: dict) -> dict:
         graphs = []
         for g in raw["graphs"]:
             if isinstance(g, dict):
-                p = g.get("primary")
-                s = g.get("secondary")
                 x = g.get("x", DEFAULT_X_KEY)  # 横軸の設定がない古い config.json は初期値
                 graphs.append(
                     {
                         "x": x if isinstance(x, str) else None,
-                        "primary": p if isinstance(p, str) else None,
-                        "secondary": s if isinstance(s, str) else None,
+                        "primary": _clean_keys(g.get("primary")),
+                        "secondary": _clean_keys(g.get("secondary")),
                     }
                 )
         cfg["graphs"] = graphs
@@ -200,6 +218,7 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
             items.append(ItemSetting(col, SOURCE_UART, s["enabled"], s["label"], float(s["coef"])))
         else:
             items.append(default_uart_item(col))
+        items[-1].color = s["color"] if s and is_color(s.get("color")) else default_color(len(items) - 1)
 
     for ch in logger.channels:
         s = saved_l.get(ch.name)
@@ -214,26 +233,24 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
                 )
         else:
             items.append(default_logger_item(ch.name, ch.unit, fmt))
+        items[-1].color = s["color"] if s and is_color(s.get("color")) else default_color(len(items) - 1)
     return items, warnings
 
 
 def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True) -> list[GraphSetting]:
-    """グラフ設定の初期値。今回ない・採用されていない項目は未選択（None）にする。"""
+    """グラフ設定の初期値。今回ない・採用されていない項目は未選択にする。"""
     src = cfg.get("graphs", DEFAULT_GRAPHS) if use_saved else DEFAULT_GRAPHS
     enabled = {it.key for it in items if it.enabled}
     graphs = []
     for g in src:
-        p = g.get("primary")
-        s = g.get("secondary")
         x = g.get("x", DEFAULT_X_KEY)
-        graphs.append(
-            GraphSetting(
-                primary=p if p in enabled else None,
-                # 第2軸は「なし」(None) と未選択を区別するため、無効なキーは "" にする
-                secondary=None if s is None else (s if s in enabled else ""),
-                x=x if (x == ELAPSED_KEY or x in enabled) else None,
-            )
-        )
+        # 「なし」(None) と未選択を区別するため、今回使えないキーは "" にする
+        prim = [None if k is None else (k if k in enabled else "") for k in _clean_keys(g.get("primary"))]
+        sec = [None if k is None else (k if k in enabled else "") for k in _clean_keys(g.get("secondary"))]
+        g2 = GraphSetting(prim, sec, x if (x == ELAPSED_KEY or x in enabled) else None)
+        if not g2.primary[0]:
+            g2.primary[0] = None  # 第1軸の1つ目は必須：未選択は None
+        graphs.append(g2)
     return graphs
 
 
@@ -259,13 +276,16 @@ def apply_settings(
     new.setdefault("uart_columns", {})
     new.setdefault("logger_channels", {})
     for it in items:
-        d = {"enabled": it.enabled, "label": it.label, "coef": it.coef}
+        d = {"enabled": it.enabled, "label": it.label, "coef": it.coef, "color": it.color}
         if it.source == SOURCE_UART:
             new["uart_columns"][it.key] = d
         else:
             d["unit"] = it.unit
             new["logger_channels"][it.key] = d
-    new["graphs"] = [{"x": g.x, "primary": g.primary, "secondary": g.secondary or None} for g in graphs]
+    new["graphs"] = [
+        {"x": g.x, "primary": [k or None for k in g.primary], "secondary": [k or None for k in g.secondary]}
+        for g in graphs
+    ]
     new["elapsed_label"] = elapsed
     new.setdefault("last_dirs", {"uart": "", "logger": ""})
     if uart_dir:

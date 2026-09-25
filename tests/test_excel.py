@@ -84,7 +84,11 @@ def test_graph_sheet(tmp_path):
     items, _ = cfgmod.build_items(cfg, u, lg)
     t = build_analysis_table(r, u, lg, items, "経過時間(s)")
     # グラフ1：横軸は初期値（elapsed_ms）、グラフ2：横軸は経過時間(s)
-    graphs = [GraphSetting("voltage_mV", "current_mA"), GraphSetting("CH1", None, ELAPSED_KEY)]
+    graphs = [
+        GraphSetting(["voltage_mV", "CH2"], ["current_mA", "CH1"]),  # 各軸2系列
+        GraphSetting(["CH1"], [None], ELAPSED_KEY),
+    ]
+    {it.key: it for it in items}["CH2"].color = "FF0000"
     out = str(tmp_path / "o.xlsx")
     write_workbook(out, t, u, lg, graphs)
 
@@ -102,7 +106,16 @@ def test_graph_sheet(tmp_path):
     assert f"'解析'!$C$7:$C${last}" in c1 and f"'解析'!$D$7:$D${last}" in c1
     assert c1.count("<scatterChart>") == 2  # 第2軸あり
     assert '<crosses val="max"/>' in c1
-    assert "電圧(mV) / 電流(mA)" in c1
+    assert "電圧(mV) / CH2(V)  |  電流(mA) / CH1(mV)" in c1  # グラフタイトル
+    assert c1.count("<ser>") == 4
+    # 第1軸 2系列目 = CH2（J列）、第2軸 2系列目 = CH1（I列）
+    assert f"'解析'!$J$7:$J${last}" in c1 and f"'解析'!$I$7:$I${last}" in c1
+    # 線の色は項目の色（CH2 は赤に変更、電圧は既定色）
+    assert '<a:srgbClr val="FF0000"/>' in c1
+    volt_color = {it.key: it for it in items}["voltage_mV"].color
+    assert f'<a:srgbClr val="{volt_color}"/>' in c1
+    # 系列番号は通し番号
+    assert all(f'<idx val="{n}"/>' in c1 for n in range(4))
     assert '<dispBlanksAs val="gap"/>' in c1
     assert '<symbol val="none"/>' in c1
     # 文字が重ならない設定：タイトル・凡例・軸タイトルは overlay なし、目盛の数値は外側
@@ -129,6 +142,14 @@ def test_validate_graphs():
     assert validate_graphs([GraphSetting("b", None)], items)
     assert validate_graphs([GraphSetting("a", "a")], items)
     assert validate_graphs([GraphSetting("a", "")], items)
+    # 各軸2系列まで・同じ項目の重複はエラー
+    items.append(ItemSetting("c", SOURCE_UART, True, "C"))
+    items.append(ItemSetting("d", SOURCE_UART, True, "D"))
+    assert validate_graphs([GraphSetting(["a", "c"], ["d", None])], items) == []
+    assert validate_graphs([GraphSetting(["a", "a"], [None])], items)
+    assert validate_graphs([GraphSetting(["a", "c"], ["c", None])], items)
+    assert validate_graphs([GraphSetting(["a", ""], [None])], items)
+    assert validate_graphs([GraphSetting(["a", "b"], [None])], items)  # b は採用なし
 
 
 def test_sheet_and_file_names():

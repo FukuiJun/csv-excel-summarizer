@@ -79,18 +79,41 @@ def test_screen2_flow(app, tmp_path):
     # グラフで選択中の項目の採用を外すと未選択（エラー）になる
     rows["current_mA"].enabled.set(False)
     app.update()
-    assert f.graph_rows[0].secondary == ""
+    assert f.graph_rows[0].secondary == ["", None]
+    assert f.graph_rows[0].cbs[3].instate(["invalid"])  # 第2軸の1つ目が赤枠
     assert f.export_btn.instate(["disabled"])
     assert str(rows["current_mA"].label_e.cget("state")) == "disabled"
     rows["current_mA"].enabled.set(True)
-    f.graph_rows[0].secondary = None
+    f.graph_rows[0].values[3] = None  # 「なし」にする
     f.on_items_changed()
     assert f.validate() == []
 
     # ラベルの変更はグラフの選択肢に即時反映
     rows["voltage_mV"].label.set("電圧(V)")
     app.update()
-    assert f.graph_rows[0].p_cb.get() == "電圧(V)"
+    assert f.graph_rows[0].cbs[1].get() == "電圧(V)"
+
+    # 第1軸に2つ目の項目を追加できる／同じ項目を2回選ぶとエラー
+    g = f.graph_rows[0]
+    g.cbs[2].set("CH1(mV)")
+    g._on_select()
+    assert g.primary == ["voltage_mV", "CH1"] and f.validate() == []
+    g.cbs[2].set("電圧(V)")
+    g._on_select()
+    assert any("2回以上" in e for e in f.validate())
+    g.cbs[2].set("なし")
+    g._on_select()
+    assert f.validate() == []
+
+    # 色：パレットで選ぶと項目の色が変わる
+    import gui
+
+    r = rows["voltage_mV"]
+    pal = gui.ColorPalette(r.color_btn, r.color)
+    pal._pick("ff0000")
+    r._set_color(pal.result)
+    assert r.to_setting().color == "FF0000"
+    assert str(r.color_btn.cget("bg")).lower() == "#ff0000"
 
     # ラベル重複・係数の数値エラー・ファイル名エラー
     rows["cap_mAh"].label.set("電圧(V)")

@@ -32,8 +32,6 @@ THIN = Side(style="thin", color="000000")
 # シート見出し（タブ）の色
 TAB_COLOR_ANALYSIS = "A9D08E"  # 緑
 TAB_COLOR_GRAPH = "F4B084"  # オレンジ
-PRIMARY_COLOR = "4472C4"
-SECONDARY_COLOR = "ED7D31"
 
 # グラフの大きさ（cm）と縦の間隔（行）
 CHART_WIDTH_CM = 24
@@ -204,11 +202,21 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
     return col_of
 
 
+def _series(ref_y, ref_x, label: str, color: str) -> Series:
+    s = Series(ref_y, ref_x, title=label)
+    s.marker.symbol = "none"
+    s.smooth = False
+    s.graphicalProperties.line.solidFill = color
+    s.graphicalProperties.line.width = 19050
+    return s
+
+
 def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], col_of: dict[str, int]) -> None:
     """グラフシートに散布図を並べる。データは解析シート(ws_data)のセル範囲を参照する。"""
     first = DATA_START_ROW
     last = DATA_START_ROW + len(table.rows) - 1
-    labels = {it.key: it.label for it in table.uart_items + table.logger_items}
+    items = {it.key: it for it in table.uart_items + table.logger_items}
+    labels = {k: it.label for k, it in items.items()}
     labels[ELAPSED_KEY] = table.elapsed_label
     col_of = {**col_of, ELAPSED_KEY: 1}
 
@@ -218,36 +226,32 @@ def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], c
     for gi, g in enumerate(graphs):
         x_key = g.x or ELAPSED_KEY
         xref = ref(col_of[x_key])
+        prim = [k for k in g.primary if k]
+        sec = [k for k in g.secondary if k]
+
         c1 = ScatterChart()
         c1.scatterStyle = "lineMarker"
         c1.display_blanks = "gap"
         c1.width = CHART_WIDTH_CM
         c1.height = CHART_HEIGHT_CM
-        p_label = labels[g.primary]
-        s1 = Series(ref(col_of[g.primary]), xref, title=p_label)
-        s1.marker.symbol = "none"
-        s1.smooth = False
-        s1.graphicalProperties.line.solidFill = PRIMARY_COLOR
-        s1.graphicalProperties.line.width = 19050
-        c1.series.append(s1)
+        for k in prim:
+            c1.series.append(_series(ref(col_of[k]), xref, labels[k], items[k].color))
+        p_title = " / ".join(labels[k] for k in prim)
         c1.x_axis.title = labels[x_key]
-        c1.y_axis.title = p_label
+        c1.y_axis.title = p_title
         c1.x_axis.axPos = "b"
         c1.x_axis.delete = False
         c1.y_axis.delete = False
-        title = p_label
-        if g.secondary:
-            s_label = labels[g.secondary]
+        title = p_title
+        c2 = None
+        if sec:
+            s_title = " / ".join(labels[k] for k in sec)
             c2 = ScatterChart()
             c2.scatterStyle = "lineMarker"
-            s2 = Series(ref(col_of[g.secondary]), xref, title=s_label)
-            s2.marker.symbol = "none"
-            s2.smooth = False
-            s2.graphicalProperties.line.solidFill = SECONDARY_COLOR
-            s2.graphicalProperties.line.width = 19050
-            c2.series.append(s2)
+            for k in sec:
+                c2.series.append(_series(ref(col_of[k]), xref, labels[k], items[k].color))
             c2.y_axis.axId = 200
-            c2.y_axis.title = s_label
+            c2.y_axis.title = s_title
             c2.y_axis.crosses = "max"
             c2.y_axis.axPos = "r"
             c2.y_axis.majorGridlines = None
@@ -258,7 +262,10 @@ def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], c
             c2.x_axis.majorGridlines = None
             c2.y_axis.crossAx = 500
             c1 += c2
-            title = f"{p_label} / {s_label}"
+            title = f"{p_title}  |  {s_title}"
+        # 系列番号を通し番号にする（凡例・色の割り当てが重ならないように）
+        for n, s_ in enumerate(c1.series + (c2.series if c2 else [])):
+            s_.idx = s_.order = n
         c1.title = title
         c1.legend.position = "b"
         # タイトル・軸タイトル・凡例がグラフ本体や目盛の数値と重ならないよう、重ねない配置にする
@@ -266,14 +273,13 @@ def _add_charts(ws, ws_data, table: AnalysisTable, graphs: list[GraphSetting], c
         c1.legend.overlay = False
         c1.x_axis.title.overlay = False
         c1.y_axis.title.overlay = False
-        if g.secondary:
-            c2.y_axis.title.overlay = False
         # 目盛の数値は軸の外側（左端・下端・右端）に置き、軸タイトルとぶつからないようにする
         c1.x_axis.tickLblPos = "low"
         c1.x_axis.crosses = "min"  # 横軸は常にグラフの下端（縦軸に負の値があっても中央に来ない）
         c1.y_axis.crosses = "min"
         c1.y_axis.tickLblPos = "low"
-        if g.secondary:
+        if c2 is not None:
+            c2.y_axis.title.overlay = False
             c2.y_axis.tickLblPos = "high"
         anchor_row = 1 + gi * CHART_ROW_STEP
         ws.add_chart(c1, f"A{anchor_row}")
@@ -286,17 +292,17 @@ def validate_graphs(graphs: list[GraphSetting], items: list[ItemSetting]) -> lis
     for i, g in enumerate(graphs, start=1):
         if not g.x or (g.x != ELAPSED_KEY and g.x not in enabled):
             errors.append(f"グラフ{i}：横軸を選択してください。")
-        elif g.x in (g.primary, g.secondary):
-            errors.append(f"グラフ{i}：横軸と縦軸に同じ項目は選べません。")
-        if not g.primary or g.primary not in enabled:
+        if not g.primary[0] or g.primary[0] not in enabled:
             errors.append(f"グラフ{i}：第1軸を選択してください。")
-        if g.secondary is not None and g.secondary != "":
-            if g.secondary not in enabled:
-                errors.append(f"グラフ{i}：第2軸の項目が採用されていません。")
-            elif g.secondary == g.primary:
-                errors.append(f"グラフ{i}：第1軸と第2軸に同じ項目は選べません。")
-        elif g.secondary == "":
-            errors.append(f"グラフ{i}：第2軸を選択してください（「なし」も選べます）。")
+        for axis, keys in (("第1軸", g.primary[1:]), ("第2軸", g.secondary)):
+            for k in keys:
+                if k == "":
+                    errors.append(f"グラフ{i}：{axis}の項目を選択してください（「なし」も選べます）。")
+                elif k is not None and k not in enabled:
+                    errors.append(f"グラフ{i}：{axis}の項目が採用されていません。")
+        chosen = [k for k in [g.x] + g.series_keys() if k]
+        if len(chosen) != len(set(chosen)):
+            errors.append(f"グラフ{i}：横軸・縦軸で同じ項目を2回以上選んでいます。")
     return errors
 
 

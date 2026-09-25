@@ -95,7 +95,7 @@ def test_save_on_success_and_restore(tmp_path):
     assert cfgmod.elapsed_label(cfg2) == "秒"
     # ラベルを変更してもグラフ設定は元の列（キー）に対応したまま
     assert cfgmod.build_graphs(cfg2, items2) == graphs
-    assert cfg2["graphs"][0] == {"x": "elapsed_ms", "primary": "voltage_mV", "secondary": "CH1"}
+    assert cfg2["graphs"][0] == {"x": "elapsed_ms", "primary": ["voltage_mV", None], "secondary": ["CH1", None]}
     assert cfg2["last_dirs"] == {"uart": str(tmp_path), "logger": str(tmp_path)}
 
 
@@ -214,3 +214,43 @@ def test_old_item_offset_is_ignored(tmp_path):
     u, lg = _data(tmp_path)
     items, _ = cfgmod.build_items(cfg, u, lg)
     assert {it.key: it for it in items}["voltage_mV"].offset == 0
+
+
+def test_item_colors_default_save_restore(tmp_path):
+    from models import DEFAULT_COLORS
+
+    cfg_path = str(tmp_path / "config.json")
+    cfg = cfgmod.load_config(cfg_path).config
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    # 既定色は項目の並び順に割り当て
+    defaults = [it.color for it in items]
+    assert defaults[:3] == DEFAULT_COLORS[:3]
+    {it.key: it for it in items}["CH1"].color = "112233"
+    _export(tmp_path, cfg, cfg_path, u, lg, items, [])
+
+    cfg2 = cfgmod.load_config(cfg_path).config
+    items2, _ = cfgmod.build_items(cfg2, u, lg)
+    assert {it.key: it for it in items2}["CH1"].color == "112233"
+    # 初期値に戻すと既定色
+    items3, _ = cfgmod.build_items(cfg2, u, lg, use_saved=False)
+    assert [it.color for it in items3] == defaults
+    # 不正な色は既定色
+    raw = json.loads(open(cfg_path, encoding="utf-8").read())
+    raw["logger_channels"]["CH1"]["color"] = "zzz"
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(raw, f)
+    items4, _ = cfgmod.build_items(cfgmod.load_config(cfg_path).config, u, lg)
+    assert [it.color for it in items4] == defaults
+
+
+def test_old_graph_format_is_read(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(
+        json.dumps({"graphs": [{"x": "elapsed_ms", "primary": "voltage_mV", "secondary": "current_mA"}]}),
+        encoding="utf-8",
+    )
+    cfg = cfgmod.load_config(str(p)).config
+    u, lg = _data(tmp_path)
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    assert cfgmod.build_graphs(cfg, items) == [GraphSetting(["voltage_mV", None], ["current_mA", None])]
