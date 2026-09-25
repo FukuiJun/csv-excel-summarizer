@@ -1,6 +1,7 @@
 """GUI の簡易テスト。tkinter とディスプレイがない環境ではスキップする。"""
 
 import os
+import sys
 
 import pytest
 
@@ -302,6 +303,16 @@ def test_window_icon(app):
 
     assert os.path.exists(gui.resource_path("assets", "LogMerger.ico"))
     assert app.icon_set  # アイコンを設定できた
+    if sys.platform.startswith("win"):
+        # 表示後に、表示倍率に合ったサイズの大・小アイコンを Win32 API で設定している
+        import time
+
+        app.deiconify()
+        for _ in range(20):
+            app.update()
+            time.sleep(0.02)
+        assert len(getattr(app, "_win_icon_handles", [])) == 2
+        assert app._icon_dpi >= 96
 
 
 def test_color_palette_opens_next_to_swatch(app):

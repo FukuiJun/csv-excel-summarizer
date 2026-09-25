@@ -49,13 +49,78 @@ def resource_path(*parts: str) -> str:
     return os.path.join(base, *parts)
 
 
+def _win32_set_icons(root: tk.Tk, ico: str) -> int | None:
+    """Windows：表示倍率に合ったサイズのアイコンを ico から読み、ウィンドウの大・小アイコンに設定する。
+
+    Tk の iconbitmap は 32px 前後の 1 枚しか設定しないため、タスクバー（大アイコンを使う）で
+    拡大・縮小されてぼやける。ここでは ico からちょうどのサイズを Windows に選ばせて設定し直す。
+    戻り値は設定に使った DPI（失敗したら None）。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    user32.LoadImageW.restype = wintypes.HANDLE
+    user32.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int, ctypes.c_int,
+                                  wintypes.UINT]
+    user32.SendMessageW.restype = ctypes.c_ssize_t
+    user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    hwnd = int(root.wm_frame(), 16)  # タイトルバーを持つ外側のウィンドウ
+    try:
+        dpi = user32.GetDpiForWindow(hwnd) or 96
+    except AttributeError:  # Windows 10 より前
+        dpi = 96
+
+    def metric(index: int) -> int:
+        try:
+            return user32.GetSystemMetricsForDpi(index, dpi)
+        except AttributeError:
+            return round(user32.GetSystemMetrics(index) * dpi / 96)
+
+    SM_CXICON, SM_CXSMICON = 11, 49
+    IMAGE_ICON, LR_LOADFROMFILE = 1, 0x10
+    WM_SETICON, ICON_SMALL, ICON_BIG = 0x80, 0, 1
+    handles = []
+    for which, idx in ((ICON_BIG, SM_CXICON), (ICON_SMALL, SM_CXSMICON)):
+        size = metric(idx)
+        h = user32.LoadImageW(None, ico, IMAGE_ICON, size, size, LR_LOADFROMFILE)
+        if not h:
+            return None
+        user32.SendMessageW(hwnd, WM_SETICON, which, h)
+        handles.append(h)
+    root._win_icon_handles = handles  # ウィンドウが使っている間は保持する
+    return dpi
+
+
+def _current_dpi(root: tk.Tk) -> int | None:
+    try:
+        import ctypes
+
+        return ctypes.windll.user32.GetDpiForWindow(int(root.wm_frame(), 16))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def set_window_icon(root: tk.Tk) -> bool:
     """タイトルバー・タスクバーのアイコンを設定する（補助ウィンドウにも適用）。失敗しても起動は続ける。"""
     try:
         if sys.platform.startswith("win"):
             ico = resource_path("assets", "LogMerger.ico")
             if os.path.exists(ico):
-                root.iconbitmap(default=ico)
+                root.iconbitmap(default=ico)  # 補助ウィンドウにも適用される
+
+                def apply(event=None):
+                    # 表示された後に、表示倍率に合ったサイズで設定し直す（倍率が変わったときも）
+                    try:
+                        dpi = _win32_set_icons(root, ico) if (
+                            event is None or getattr(root, "_icon_dpi", None) != _current_dpi(root)) else None
+                        if dpi:
+                            root._icon_dpi = dpi
+                    except Exception:  # noqa: BLE001  失敗しても iconbitmap のアイコンのまま
+                        pass
+
+                root.after(50, apply)
+                root.bind("<Configure>", lambda e: e.widget is root and apply(e), add="+")
                 return True
         pngs = [resource_path("assets", f"LogMerger_{s}.png") for s in (16, 32, 48, 256)]
         pngs = [p for p in pngs if os.path.exists(p)]
