@@ -67,8 +67,13 @@ class ColorPalette(tk.Toplevel):
         self._on_pick = on_pick
         self._anchor = anchor
         self.withdraw()
+        # 枠なしのポップアップ。transient にすると Windows では親の状態によって表示されないことがあるため、
+        # 代わりに最前面表示にする（外側クリック・Esc・色の選択で閉じる）
         self.overrideredirect(True)
-        self.transient(top)
+        try:
+            self.attributes("-topmost", True)
+        except tk.TclError:  # pragma: no cover
+            pass
         current = (current or "").upper()
 
         outer = tk.Frame(self, bd=0, highlightthickness=1, highlightbackground="#C8C8C8", highlightcolor="#C8C8C8")
