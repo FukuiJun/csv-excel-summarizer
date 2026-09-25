@@ -205,20 +205,20 @@ def test_time_unit_columns_for_graph_x_axis(tmp_path):
     graphs = [
         GraphSetting(["voltage_mV"], [None], "elapsed_ms", "min"),  # time(ms) → time(min)
         GraphSetting(["current_mA"], [None], "elapsed_ms", "min"),  # 同じ単位は列 1 つ
-        GraphSetting(["CH1"], [None], ELAPSED_KEY, "h"),  # 経過時間(s) → 経過時間(h)
+        GraphSetting(["CH1"], [None], ELAPSED_KEY, "min"),  # 経過時間(s) → 経過時間(min)
         GraphSetting(["CH2"], [None], "elapsed_ms", "ms"),  # 元と同じ単位 → 列を足さない
     ]
     out = str(tmp_path / "o.xlsx")
     write_workbook(out, t, u, lg, graphs)
     ws = openpyxl.load_workbook(out)["解析"]
     heads = [c.value for c in ws[6]]
-    # A 経過時間(s)、B 経過時間(h)、C time(ms)、D time(min)、以降は元どおり
-    assert heads[:5] == ["経過時間(s)", "経過時間(h)", "time(ms)", "time(min)", "電圧(mV)"]
+    # A 経過時間(s)、B 経過時間(min)、C time(ms)、D time(min)、以降は元どおり
+    assert heads[:5] == ["経過時間(s)", "経過時間(min)", "time(ms)", "time(min)", "電圧(mV)"]
     assert heads.count("time(min)") == 1
     for row in range(7, 7 + len(r.rows)):
         ms = ws[f"C{row}"].value
         assert ws[f"D{row}"].value == pytest.approx(ms / 60000)
-        assert ws[f"B{row}"].value == pytest.approx(ws[f"A{row}"].value / 3600, abs=1e-6)
+        assert ws[f"B{row}"].value == pytest.approx(ws[f"A{row}"].value / 60, abs=1e-6)
     # 欠落行（10 行目）の換算値もある
     assert ws["D10"].value is not None and ws["D10"].fill.fgColor.rgb.endswith("D9D9D9")
 
@@ -230,7 +230,7 @@ def test_time_unit_columns_for_graph_x_axis(tmp_path):
         c3 = z.read("xl/charts/chart3.xml").decode().replace(" />", "/>")
         c4 = z.read("xl/charts/chart4.xml").decode().replace(" />", "/>")
     assert f"<xVal><numRef><f>'解析'!$D$7:$D${last}</f>" in c1 and "time(min)" in c1
-    assert f"<xVal><numRef><f>'解析'!$B$7:$B${last}</f>" in c3 and "経過時間(h)" in c3
+    assert f"<xVal><numRef><f>'解析'!$B$7:$B${last}</f>" in c3 and "経過時間(min)" in c3
     assert f"<xVal><numRef><f>'解析'!$C$7:$C${last}</f>" in c4
 
 
@@ -238,7 +238,7 @@ def test_time_unit_label():
     from excel_writer import time_unit_label
 
     assert time_unit_label("time(ms)", "min") == "time(min)"
-    assert time_unit_label("経過時間(s)", "h") == "経過時間(h)"
+    assert time_unit_label("経過時間(s)", "min") == "経過時間(min)"
     assert time_unit_label("time", "s") == "time(s)"
 
 

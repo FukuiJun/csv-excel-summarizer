@@ -266,6 +266,9 @@ def test_graph_x_unit_save_restore(tmp_path):
     p = tmp_path / "config.json"
     p.write_text(json.dumps({"graphs": [{"x": "elapsed_ms", "x_unit": "day", "primary": ["voltage_mV"]}]}), encoding="utf-8")
     assert cfgmod.build_graphs(cfgmod.load_config(str(p)).config, items)[0].x_unit is None  # 不正な単位
+    # h は廃止：以前に保存した h は min に読み替える
+    p.write_text(json.dumps({"graphs": [{"x": "elapsed_ms", "x_unit": "h", "primary": ["voltage_mV"]}]}), encoding="utf-8")
+    assert cfgmod.build_graphs(cfgmod.load_config(str(p)).config, items)[0].x_unit == "min"
 
 
 def test_build_graphs_single_source_and_keep_saved_graphs(tmp_path):

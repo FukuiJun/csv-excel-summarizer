@@ -128,6 +128,8 @@ def _normalize(raw: dict) -> dict:
             if isinstance(g, dict):
                 x = g.get("x", DEFAULT_X_KEY)  # 横軸の設定がない古い config.json は初期値
                 xu = g.get("x_unit")
+                if xu == "h":  # h は廃止。以前の設定は一番近い min に読み替える
+                    xu = "min"
                 graphs.append(
                     {
                         "x": x if isinstance(x, str) else None,

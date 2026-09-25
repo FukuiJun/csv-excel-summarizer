@@ -12,7 +12,7 @@ ELAPSED_KEY = "@elapsed"
 # グラフ横軸の初期値
 DEFAULT_X_KEY = "elapsed_ms"
 # グラフ横軸の時間の単位（ms に対する倍率）と、時間の項目の元の単位
-TIME_UNITS = {"ms": 1, "s": 1000, "min": 60_000, "h": 3_600_000}
+TIME_UNITS = {"ms": 1, "s": 1000, "min": 60_000}
 TIME_KEYS = {"elapsed_ms": "ms", ELAPSED_KEY: "s"}
 # グラフ1つの縦軸1本あたりに載せられる系列数
 MAX_SERIES_PER_AXIS = 2

@@ -388,6 +388,7 @@ def test_graph_x_unit_radio(app):
     f = _load(app)
     g = f.graph_rows[0]
     assert g.x == "elapsed_ms" and g.x_unit.get() == "ms"
+    assert [str(rb.cget("text")) for rb in g.unit_radios] == ["ms", "s", "min"]  # h はない
     assert not g.unit_radios[0].instate(["disabled"])
     g.x_unit.set("min")
     assert g.to_setting().x_unit == "min" and g.to_setting().effective_x_unit() == "min"
