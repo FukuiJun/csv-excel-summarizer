@@ -143,7 +143,8 @@ class ItemRow:
         if str(self.color_btn.cget("state")) == "disabled":
             return
         if self._palette is not None and self._palette.winfo_exists():
-            self._palette.lift()  # 既に開いている
+            self._palette.close()  # 開いているときにもう一度押したら閉じる
+            self._palette = None
             return
         self._palette = ColorPalette(self.color_btn, self.color, on_pick=self._picked, th=self.th)
 

@@ -115,8 +115,20 @@ def test_screen2_flow(app, tmp_path):
     app.update()
     pal = r._palette
     assert isinstance(pal, gui.ColorPalette) and pal.winfo_exists() and pal.winfo_viewable()
-    r.color_btn.invoke()  # もう一度押しても2つ目は開かない
-    assert r._palette is pal
+    r.color_btn.invoke()  # 開いているときにもう一度押すと閉じる
+    app.update()
+    assert not pal.winfo_exists() and r._palette is None
+    before = r.color
+    for close in ("close_btn", "cancel_btn"):  # ［✕ 閉じる］［キャンセル］で閉じる（色は変わらない）
+        r.color_btn.invoke()
+        app.update()
+        p = r._palette
+        getattr(p, close).invoke()
+        app.update()
+        assert not p.winfo_exists() and r.color == before
+    r.color_btn.invoke()
+    app.update()
+    pal = r._palette
     pal._pick("ff0000")  # パレットの色をクリック
     assert not pal.winfo_exists()
     assert r.to_setting().color == "FF0000"

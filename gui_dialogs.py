@@ -92,7 +92,9 @@ class ColorPalette(tk.Toplevel):
         t.pack(side="left", padx=(th.px(10), 0))
         label(t, th, "現在の色", font="caption", fg="text2", bg="panel").pack(anchor="w")
         label(t, th, f"#{current}", font="body_bold", bg="panel").pack(anchor="w")
-        label(head, th, "Esc で閉じる", font="caption", fg="text2", bg="panel").pack(side="right", anchor="n")
+        # 枠なしのポップアップなので、マウスで閉じるボタンを付ける（Esc・外側クリックでも閉じる）
+        self.close_btn = ttk.Button(head, text="✕ 閉じる", style="Small.TButton", command=self.close)
+        self.close_btn.pack(side="right", anchor="n")
         hline(body, th, "row_line").pack(fill="x", pady=(th.px(10), th.px(10)))
 
         label(body, th, "テーマの色", font="heading", fg="text2", bg="panel").pack(anchor="w")
@@ -110,7 +112,13 @@ class ColorPalette(tk.Toplevel):
         g3.pack(anchor="w", pady=(th.px(6), 0))
         for c, col in enumerate(self.STANDARD):
             self._swatch(g3, col, current, 0, c)
-        ttk.Button(body, text="その他の色…", command=self._more).pack(fill="x", pady=(th.px(10), 0))
+        bottom = frame(body, th, "panel")
+        bottom.pack(fill="x", pady=(th.px(10), 0))
+        bottom.columnconfigure(0, weight=1, uniform="b")
+        bottom.columnconfigure(1, weight=1, uniform="b")
+        ttk.Button(bottom, text="その他の色…", command=self._more).grid(row=0, column=0, sticky="ew", padx=(0, th.px(4)))
+        self.cancel_btn = ttk.Button(bottom, text="キャンセル", command=self.close)
+        self.cancel_btn.grid(row=0, column=1, sticky="ew", padx=(th.px(4), 0))
 
         # クリックした色見本の真下に表示する（位置の計算は _place）
         self._place()
