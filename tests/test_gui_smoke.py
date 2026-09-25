@@ -283,3 +283,10 @@ def test_drop_files(app, tmp_path):
     finally:
         gui.messagebox.showwarning = orig
     assert shown and "x.csv" in shown[0][1]
+
+
+def test_window_icon(app):
+    import gui
+
+    assert os.path.exists(gui.resource_path("assets", "LogMerger.ico"))
+    assert app.icon_set  # アイコンを設定できた

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tkinter as tk
 import traceback
 from datetime import datetime
@@ -42,10 +43,36 @@ except ImportError:  # pragma: no cover
     TkinterDnD = None
 
 
+def resource_path(*parts: str) -> str:
+    """同梱ファイルの場所（PyInstaller の exe では展開先、通常はこのファイルのフォルダ）。"""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, *parts)
+
+
+def set_window_icon(root: tk.Tk) -> bool:
+    """タイトルバー・タスクバーのアイコンを設定する（補助ウィンドウにも適用）。失敗しても起動は続ける。"""
+    try:
+        if sys.platform.startswith("win"):
+            ico = resource_path("assets", "LogMerger.ico")
+            if os.path.exists(ico):
+                root.iconbitmap(default=ico)
+                return True
+        pngs = [resource_path("assets", f"LogMerger_{s}.png") for s in (16, 32, 48, 256)]
+        pngs = [p for p in pngs if os.path.exists(p)]
+        if pngs:
+            root._icon_images = [tk.PhotoImage(master=root, file=p) for p in pngs]  # 参照を保持
+            root.iconphoto(True, *root._icon_images)
+            return True
+    except tk.TclError:
+        pass
+    return False
+
+
 class App(tk.Tk):
     def __init__(self, config_path: str | None = None):
         super().__init__()
         self.title(APP_TITLE)
+        self.icon_set = set_window_icon(self)
         w = T.WINDOW
 
         self.config_path = config_path or cfgmod.default_config_path()

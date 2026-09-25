@@ -17,8 +17,20 @@ def _enable_dpi_awareness() -> None:
             pass
 
 
+def _set_app_id() -> None:
+    """タスクバーで Python のアイコンにならないよう、アプリの ID を設定する（Windows）。"""
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LogMerger")
+        except (AttributeError, OSError):
+            pass
+
+
 def main() -> None:
     _enable_dpi_awareness()
+    _set_app_id()
     from gui import App
 
     app = App()

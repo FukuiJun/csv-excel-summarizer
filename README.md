@@ -132,6 +132,12 @@ UTF-8 で保存してください。
 - 今回の CSV にない列・CH の設定は削除されずに残ります（CH 数を一時的に減らした場合など）
 - 間隔・出力先フォルダ・ファイル名は保存されません（毎回 CSV から決まります）
 
+## アイコン
+
+アプリのアイコン（Claude Design で作成）は `assets/` にあります。exe のアイコン（ビルド時の `--icon`）と、
+ウィンドウのタイトルバー・タスクバーのアイコンに使われます。元データ（SVG・各サイズの PNG）は
+`docs/claude_design/handoff/assets/icon/` にあります。
+
 ## 困ったとき
 
 画面の操作中に想定外のエラーが起きると、メッセージを表示し、`config.json` と同じフォルダの `error.log` に詳細を記録します。
@@ -143,7 +149,7 @@ UTF-8 で保存してください。
 
 ```
 pip install -r requirements-dev.txt
-pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --collect-all tkinterdnd2 --name LogMerger main.py
+pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --collect-all tkinterdnd2 --icon assets/LogMerger.ico --add-data "assets;assets" --name LogMerger main.py
 ```
 
 （`build.bat` を実行しても同じです）
