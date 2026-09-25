@@ -1,0 +1,179 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>実装仕様</title></head><body>
+
+
+<style>
+body{margin:0;font-family:"Segoe UI","Yu Gothic UI","Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;color:#1c1c1c;background:#ffffff;font-size:14px}
+h2{margin:0;font-size:20px;font-weight:700}
+.cap{font-size:12px;color:#5c5c5c}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.row{display:grid;align-items:center;column-gap:16px;min-height:36px;border-bottom:1px solid #ececec;padding:4px 0}
+.hd{font-size:12px;font-weight:700;color:#5c5c5c;border-bottom:1px solid #d1d1d1}
+.chip{display:inline-flex;align-items:center;gap:8px}
+.sq{width:20px;height:20px;border-radius:3px;border:1px solid #bdbdbd;flex-shrink:0}
+.sec{display:flex;flex-direction:column;gap:12px}
+</style>
+
+<div style="width: 1320px; height: 2000px; box-sizing: border-box; padding: 48px; background: #ffffff; display: flex; flex-direction: column; gap: 40px; overflow: hidden">
+
+  <div style="display: flex; flex-direction: column; gap: 8px; border-bottom: 2px solid #1c1c1c; padding-bottom: 20px">
+    <span class="cap">LogMerger ・ tkinter / ttk ＋ sv-ttk（Sun Valley）で実装する前提</span>
+    <span style="font-size: 32px; font-weight: 700">実装仕様</span>
+    <span style="max-width: 980px; line-height: 1.7">画面2 を「左：読み込み結果・間隔・出力先（サイドバー）」「右：よく触る 項目／グラフ（タブ）」の 2 カラムに再構成。ヘッダーに手順（1 ファイル選択 › 2 出力内容の調整）、フッターに状態とボタンを固定。サイズはすべて 96dpi（100%）時の px。tkinter のフォントは負の数でピクセル指定。</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 56px; row-gap: 40px; align-items: start">
+
+    <!-- 左カラム -->
+    <div style="display: flex; flex-direction: column; gap: 40px">
+      <div class="sec">
+        <h2>レイアウト（画面2）</h2>
+        <span class="cap">1120×720 を 1/2 で表示。フッターは常に下に固定。サイドバーと表は別々に縦スクロール。</span>
+        <div style="width: 560px; height: 360px; border: 1px solid #8a8a8a; display: flex; flex-direction: column; font-size: 12px">
+          <div style="height: 28px; flex-shrink: 0; background: #fafafa; border-bottom: 1px solid #c8c8c8; display: flex; align-items: center; justify-content: space-between; padding: 0 12px">ヘッダー：手順表示<span class="mono" style="font-size: 12px">高さ 56 / 左右 24</span></div>
+          <div style="flex-grow: 1; display: flex; min-height: 0">
+            <div style="width: 170px; flex-shrink: 0; background: #f3f3f3; border-right: 1px solid #c8c8c8; padding: 8px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px">
+              <b>サイドバー</b>
+              <span class="mono" style="font-size: 12px">幅 340（固定）</span>
+              <span class="mono" style="font-size: 12px">余白 上下16 左右20</span>
+              <span style="border: 1px dashed #a0a0a0; padding: 4px">読み込み結果</span>
+              <span style="border: 1px dashed #a0a0a0; padding: 4px">間隔・時間オフセット<br>（折りたたみ）</span>
+              <span style="border: 1px dashed #a0a0a0; padding: 4px">出力先</span>
+              <span class="cap">区切り：上罫線＋上余白16</span>
+            </div>
+            <div style="flex-grow: 1; padding: 8px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px">
+              <b>メイン（残り幅）</b>
+              <span class="mono" style="font-size: 12px">余白 上下16 左右24</span>
+              <div style="height: 20px; border-bottom: 1px solid #c8c8c8; display: flex; gap: 4px; align-items: flex-end"><span style="border: 1px solid #c8c8c8; border-bottom: none; padding: 0 8px; background: #ffffff">出力する項目</span><span style="padding: 0 8px">グラフ</span><span class="mono" style="margin-left: auto; font-size: 11px">Notebook 40</span></div>
+              <div style="flex-grow: 1; border: 1px solid #c8c8c8; border-top: none; background: #ffffff; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px">
+                <span class="mono" style="font-size: 11px">列 36 | 150 | 210 | 84 | 56 | 残り（列間 12）</span>
+                <span class="mono" style="font-size: 11px">行の高さ 34（入力欄 30）／見出し行 30 は固定</span>
+                <span class="mono" style="font-size: 11px">グループ見出し 28（UART／ロガー）</span>
+              </div>
+            </div>
+          </div>
+          <div style="height: 32px; flex-shrink: 0; background: #f3f3f3; border-top: 1px solid #c8c8c8; display: flex; align-items: center; justify-content: space-between; padding: 0 12px">フッター：初期値に戻す ｜ 状態 ｜ 戻る・Excelに出力<span class="mono" style="font-size: 12px">高さ 64</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>余白・サイズ</h2>
+        <div style="display: flex; flex-direction: column">
+          <div class="row hd" style="grid-template-columns: 240px minmax(0, 1fr)"><span>対象</span><span>値（px）</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>基本単位</span><span class="mono">4 の倍数（4 / 8 / 12 / 16 / 20 / 24）</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>ボタン</span><span class="mono">高さ 32、左右 16、最小幅 96、強調ボタン 148、ボタン間 8</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>入力欄・プルダウン</span><span class="mono">高さ 30（画面1は 32）、内側左右 10</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>サイドバーのセクション間</span><span class="mono">16（上罫線 1 ＋ 上余白 16）、セクション内 6〜8</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>間隔・オフセットの表</span><span class="mono">列 76 | 可変 | 可変 | 22、列間 8、行間 6</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>グラフのブロック</span><span class="mono">枠 1、内側 12/16、ブロック間 12、列 150 | 可変 | 可変</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>色見本</span><span class="mono">44×24、枠 1 #BDBDBD</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>チェックボックス</span><span class="mono">18×18（sv-ttk 標準）</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>ウィンドウ</h2>
+        <div style="display: flex; flex-direction: column">
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>初期サイズ</span><span class="mono">1120 × 720（現行 920 × 860）</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>最小サイズ</span><span class="mono">960 × 560 を推奨（2 カラムを保つため）</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>幅が広いとき</span><span>ラベル列だけ伸ばす（上限 320）。他の列は固定</span></div>
+          <div class="row" style="grid-template-columns: 240px minmax(0, 1fr)"><span>高さが足りないとき</span><span>サイドバー・表がそれぞれスクロール。ヘッダー／フッターは固定</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>文字</h2>
+        <span class="cap">フォントは "Yu Gothic UI"（無ければ "Meiryo UI"）。( ) 内は tkinter の指定。</span>
+        <div style="display: flex; flex-direction: column">
+          <div class="row hd" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span>役割</span><span>指定</span><span>使う場所</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span style="font-size: 16px; font-weight: 700">画面見出し</span><span class="mono">16px 太字 (-16, "bold")</span><span>ヘッダーの現在ステップ、完了ダイアログ</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span style="font-size: 20px; font-weight: 700">36 行</span><span class="mono">20px 太字 (-20, "bold")</span><span>読み込み結果の行数</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span>本文</span><span class="mono">14px 標準 (-14)</span><span>入力欄・表・ボタン・タブ</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span style="font-weight: 700">強調本文</span><span class="mono">14px 太字 (-14, "bold")</span><span>選択中タブ、出力予定の行数、強調ボタン</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span style="font-size: 12px; font-weight: 700; color: #5c5c5c">セクション見出し</span><span class="mono">12px 太字 text-2</span><span>読み込み結果・出力先・表の列見出し</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span class="cap">補足</span><span class="mono">12px 標準 text-2</span><span>単位、説明、件数</span></div>
+          <div class="row" style="grid-template-columns: 180px 220px minmax(0, 1fr)"><span style="font-size: 13px; font-weight: 700; color: #0e700e">状態の帯</span><span class="mono">13px 太字</span><span>欠落なし／欠落あり／エラー一覧の見出し</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右カラム -->
+    <div style="display: flex; flex-direction: column; gap: 40px">
+      <div class="sec">
+        <h2>色（ライト／ダーク）</h2>
+        <div style="display: flex; flex-direction: column">
+          <div class="row hd" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span>名前</span><span>ライト</span><span>ダーク</span><span>用途</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">bg</span><span class="chip"><span class="sq" style="background: #fafafa"></span><span class="mono">#FAFAFA</span></span><span class="chip"><span class="sq" style="background: #1c1c1c"></span><span class="mono">#1C1C1C</span></span><span>画面背景・ヘッダー・メイン</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">surface</span><span class="chip"><span class="sq" style="background: #f3f3f3"></span><span class="mono">#F3F3F3</span></span><span class="chip"><span class="sq" style="background: #202020"></span><span class="mono">#202020</span></span><span>サイドバー・フッター</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">panel</span><span class="chip"><span class="sq" style="background: #ffffff"></span><span class="mono">#FFFFFF</span></span><span class="chip"><span class="sq" style="background: #272727"></span><span class="mono">#272727</span></span><span>表のパネル、選択中タブ</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">tile</span><span class="chip"><span class="sq" style="background: #ffffff"></span><span class="mono">#FFFFFF</span></span><span class="chip"><span class="sq" style="background: #2b2b2b"></span><span class="mono">#2B2B2B</span></span><span>読み込み結果のタイル</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">border</span><span class="chip"><span class="sq" style="background: #e5e5e5"></span><span class="mono">#E5E5E5</span></span><span class="chip"><span class="sq" style="background: #333333"></span><span class="mono">#333333</span></span><span>枠・区切り線</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">text</span><span class="chip"><span class="sq" style="background: #1c1c1c"></span><span class="mono">#1C1C1C</span></span><span class="chip"><span class="sq" style="background: #f3f3f3"></span><span class="mono">#F3F3F3</span></span><span>本文</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">text-2</span><span class="chip"><span class="sq" style="background: #5c5c5c"></span><span class="mono">#5C5C5C</span></span><span class="chip"><span class="sq" style="background: #b3b3b3"></span><span class="mono">#B3B3B3</span></span><span>補足・列見出し（#A0A0A0 は本文には薄すぎるため変更）</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">disabled</span><span class="chip"><span class="sq" style="background: #a0a0a0"></span><span class="mono">#A0A0A0</span></span><span class="chip"><span class="sq" style="background: #6e6e6e"></span><span class="mono">#6E6E6E</span></span><span>無効な入力欄の文字</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">accent</span><span class="chip"><span class="sq" style="background: #005fb8"></span><span class="mono">#005FB8</span></span><span class="chip"><span class="sq" style="background: #4cc2ff"></span><span class="mono">#4CC2FF</span></span><span>強調ボタン・チェック・現在ステップ（ダークは黒文字）</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">info</span><span class="chip"><span class="sq" style="background: #eff6fc"></span><span class="mono">#EFF6FC</span></span><span class="chip"><span class="sq" style="background: #1b2c3d"></span><span class="mono">#1B2C3D</span></span><span>出力予定の枠（枠線 #CFE4FA ／ #2C4A66）</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">success</span><span class="chip"><span class="sq" style="background: #0e700e"></span><span class="mono">#0E700E</span></span><span class="chip"><span class="sq" style="background: #6ccb5f"></span><span class="mono">#6CCB5F</span></span><span>文字。背景 #DFF6DD ／ #1F3A1D</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">warning</span><span class="chip"><span class="sq" style="background: #9d5d00"></span><span class="mono">#9D5D00</span></span><span class="chip"><span class="sq" style="background: #fce100"></span><span class="mono">#FCE100</span></span><span>文字。背景 #FFF4CE ／ #433519、行 #FFFBEA ／ #2E2A1C</span></div>
+          <div class="row" style="grid-template-columns: 110px 130px 130px minmax(0, 1fr)"><span class="mono">error</span><span class="chip"><span class="sq" style="background: #c42b1c"></span><span class="mono">#C42B1C</span></span><span class="chip"><span class="sq" style="background: #ff99a4"></span><span class="mono">#FF99A4</span></span><span>文字・下線。背景 #FDE7E9 ／ #442726、行 #FDF3F4 ／ #2E2021</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2>状態の見せ方</h2>
+        <span class="cap">出力予定の枠は行数に応じて色を変える（行数・しきい値は現行どおり）。</span>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="background: #eff6fc; border: 1px solid #cfe4fa; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px">UART基準・ロガーを間引き</span><span style="font-weight: 700">出力予定 8 行</span></div>
+            <span class="cap">通常</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="background: #fff4ce; border: 1px solid #f2d88a; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; color: #9d5d00"><span style="font-size: 12px">⚠ 10万行を超えています</span><span style="font-weight: 700">出力予定 [行数] 行</span></div>
+            <span class="cap">10万行超（警告色）</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="background: #fde7e9; border: 1px solid #f4bfc4; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; color: #c42b1c"><span style="font-size: 12px">⚠ 100万行を超えています</span><span style="font-weight: 700">出力予定 [行数] 行</span></div>
+            <span class="cap">100万行超（エラー色）</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px">
+          <span style="font-weight: 700">フッターの状態表示</span>
+          <div style="display: flex; flex-direction: column">
+            <div class="row" style="grid-template-columns: 220px minmax(0, 1fr)"><span style="color: #0e700e; font-weight: 700">✓ エラーはありません</span><span>エラー・警告なし</span></div>
+            <div class="row" style="grid-template-columns: 220px minmax(0, 1fr)"><span style="color: #9d5d00; font-weight: 700">⚠ 警告 2件（出力はできます）</span><span>欠落・単位変更など。［Excelに出力］は有効</span></div>
+            <div class="row" style="grid-template-columns: 220px minmax(0, 1fr)"><span style="color: #c42b1c; font-weight: 700">エラー一覧パネル</span><span>ボタン行の上に出す。2列×最大3行（6件）＋「…ほか N 件」。各行の赤い見出しで該当欄へ移動</span></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px">
+          <span style="font-weight: 700">エラーの場所を示す 3 か所（同じ文言でつなぐ）</span>
+          <div style="display: flex; flex-direction: column">
+            <div class="row" style="grid-template-columns: 220px minmax(0, 1fr)"><span>1. 入力欄</span><span>赤い下線（sv-ttk の invalid）</span></div>
+            <div class="row" style="grid-template-columns: 220px minmax(0, 1fr)"><span>2. 表の行・タブ</span><span>行の背景を淡い赤＋右端に短い理由。タブ名に「エラー N」</span></div>
+            <div class="row" style="grid-template-columns: 220px minmax(0, 1fr)"><span>3. フッター一覧</span><span>「項目 › voltage_mV」のように場所を先頭に付ける</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 部品対応 -->
+  <div class="sec">
+    <h2>部品と実装方法</h2>
+    <div style="display: flex; flex-direction: column">
+      <div class="row hd" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>部品</span><span>tkinter / ttk</span><span>メモ</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>強調ボタン</span><span class="mono">ttk.Button(style="Accent.TButton")</span><span>各画面 1 つだけ：読み込み／Excelに出力／フォルダを開く</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>タブ</span><span class="mono">ttk.Notebook ＋ tab(i, text=…)</span><span>件数は文字で「出力する項目  9/12」。赤いバッジにしたい場合は PNG を image＋compound="right"</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>折りたたみ</span><span class="mono">ttk.Button(style="Toolbutton") ＋ frame.grid_remove()</span><span>閉じているときは 1 行の要約（間隔 1000 / 200 ms …）を表示。開閉状態は設定に保存</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>読み込み結果タイル</span><span class="mono">tk.Frame(bg=tile, highlightthickness=1, highlightbackground=border)</span><span>角丸は省略可（必要なら 9-slice PNG）</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>状態の帯（成功・警告・エラー）</span><span class="mono">tk.Frame(bg=…) ＋ tk.Label(bg=…, fg=…)</span><span>アイコンは ✓ ⚠ の記号文字、または 16px PNG</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>ドロップ枠（画面1）</span><span class="mono">tk.Canvas ＋ create_rectangle(dash=(6, 4), outline="#8FB3DC")</span><span>背景 #F2F7FC、高さ 220。ドロップ先として登録。ドラッグ中は枠を accent 実線に</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>項目の表</span><span class="mono">ttk.Frame の grid（見出しはスクロール領域の外）</span><span>グループ見出し「UART」「ロガー GL240」に採用数を表示</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>エラー／警告の行の色</span><span class="mono">行ごとに tk.Frame(bg=…)、ttk 部品は Err.TLabel 等のスタイル</span><span>入力欄は widget.state(["invalid"]) で赤下線</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>色見本</span><span class="mono">tk.Button(bg=色, relief="flat", highlightthickness=1)</span><span>44×24。押すとパレットの Toplevel(overrideredirect) を真下に</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>グラフ設定</span><span class="mono">ttk.LabelFrame 相当の枠 ＋ ttk.Combobox(state="readonly")</span><span>1 グラフ = 3 行（横軸／第1軸×2／第2軸×2）。幅 780 でも右端が切れない</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>エラー一覧の見出し</span><span class="mono">ttk.Label(cursor="hand2") ＋ bind("&lt;Button-1&gt;", …)</span><span>notebook.select → スクロールして表示 → widget.focus_set()</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>スクロール</span><span class="mono">Canvas ＋ Frame（サイドバーと表で別々）</span><span>ホイールはカーソルの下の領域だけ動かす</span></div>
+      <div class="row" style="grid-template-columns: 200px 420px minmax(0, 1fr)"><span>ダークテーマ</span><span class="mono">sv_ttk.set_theme("dark") ＋ 上の色表の dark 列</span><span>tk.Frame / tk.Label など sv-ttk が塗らない部品だけ手動で色を切替</span></div>
+    </div>
+  </div>
+</div>
+</body></html>

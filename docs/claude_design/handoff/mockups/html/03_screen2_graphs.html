@@ -1,0 +1,158 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>画面2 出力内容の調整（グラフタブ）</title></head><body>
+
+
+<style>
+body{margin:0;font-family:"Segoe UI","Yu Gothic UI","Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;color:#1c1c1c;background:#fafafa;font-size:14px}
+.in{box-sizing:border-box;height:30px;padding:0 10px;border:1px solid #e5e5e5;border-bottom-color:#8a8a8a;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;min-width:0;width:100%}
+.in.num{text-align:right}
+.btn{box-sizing:border-box;height:32px;padding:0 16px;border:1px solid #e0e0e0;border-bottom-color:#c8c8c8;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap}
+.btn.accent{background:#005fb8;border-color:#005fb8;color:#ffffff;font-weight:600}
+.btn.sm{height:28px;padding:0 10px;font-size:13px}
+.tool{border:none;background:none;padding:0;font:inherit;color:#1c1c1c;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.cb{box-sizing:border-box;height:30px;width:100%;padding:0 8px 0 10px;border:1px solid #e5e5e5;border-bottom-color:#8a8a8a;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;display:flex;align-items:center;justify-content:space-between;text-align:left;cursor:pointer}
+.cb.none{color:#5c5c5c}
+.h{font-size:12px;font-weight:700;color:#5c5c5c}
+.cap{font-size:12px;color:#5c5c5c}
+a{color:#005fb8}a:hover{color:#003e92}
+</style>
+
+<div style="width: 1120px; height: 720px; display: flex; flex-direction: column; background: #fafafa; overflow: hidden">
+  <div style="height: 56px; flex-shrink: 0; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e5e5">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 8px; color: #5c5c5c">
+        <span style="width: 24px; height: 24px; border-radius: 12px; border: 1px solid #c8c8c8; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2l2.2 2.2 4.8-5"></path></svg></span>
+        <span>ファイル選択</span>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#a0a0a0" stroke-width="1.5"><path d="M6 3l5 5-5 5"></path></svg>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 12px; background: #005fb8; color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
+        <span style="font-size: 16px; font-weight: 700">出力内容の調整</span>
+      </div>
+    </div>
+    <span class="cap">log40.csv ＋ 260924-090155.CSV</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0">
+    <aside style="width: 340px; flex-shrink: 0; box-sizing: border-box; padding: 16px 20px; background: #f3f3f3; border-right: 1px solid #e5e5e5; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <div class="h">読み込み結果</div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <div style="background: #ffffff; border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 1px">
+            <span class="cap">UART</span>
+            <span style="font-size: 20px; font-weight: 700; line-height: 1.2">8<span style="font-size: 13px; font-weight: 400; margin-left: 3px">行</span></span>
+            <span class="cap">09:09:54〜09:10:01</span>
+            <span class="cap">スキップ 0 ・ 重複 0</span>
+          </div>
+          <div style="background: #ffffff; border: 1px solid #e5e5e5; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 1px">
+            <span class="cap">ロガー GL240</span>
+            <span style="font-size: 20px; font-weight: 700; line-height: 1.2">36<span style="font-size: 13px; font-weight: 400; margin-left: 3px">行</span></span>
+            <span class="cap">2CH</span>
+            <span class="cap">測定間隔 200ms</span>
+          </div>
+        </div>
+        <div style="height: 32px; box-sizing: border-box; padding: 0 12px; border-radius: 4px; background: #dff6dd; color: #0e700e; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#0e700e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.2"></path></svg>
+          欠落なし
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #e0e0e0; padding-top: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; height: 24px">
+          <button class="tool" aria-expanded="false">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#5c5c5c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l4 4-4 4"></path></svg>
+            <span class="h">間隔・時間オフセット</span>
+          </button>
+          <span class="cap">たまに変更</span>
+        </div>
+        <div class="cap" style="padding-left: 20px">間隔 1000 / 200 ms ・ オフセット 0 / 0 ms</div>
+        <div style="margin-top: 2px; background: #eff6fc; border: 1px solid #cfe4fa; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 12px">UART基準・ロガーを時刻で間引き（約5行ごと）</span>
+          <span style="font-weight: 700">出力予定 8 行</span>
+        </div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #e0e0e0; padding-top: 16px">
+        <div class="h" style="margin-bottom: 4px">出力先</div>
+        <label for="dir" class="cap">フォルダ</label>
+        <div style="display: flex; gap: 8px">
+          <input id="dir" class="in" value="C:\data">
+          <button class="btn" style="height: 30px; flex-shrink: 0">参照…</button>
+        </div>
+        <label for="fname" class="cap" style="margin-top: 6px">ファイル名</label>
+        <input id="fname" class="in" value="解析_260924-090954.xlsx">
+      </section>
+    </aside>
+
+    <main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 16px 24px; display: flex; flex-direction: column">
+      <div role="tablist" style="height: 40px; flex-shrink: 0; display: flex; align-items: flex-end; gap: 4px; border-bottom: 1px solid #e5e5e5">
+        <button role="tab" aria-selected="false" style="height: 40px; box-sizing: border-box; padding: 0 18px; border: 1px solid transparent; background: none; font: inherit; color: #5c5c5c; display: flex; align-items: center; gap: 8px">出力する項目<span style="font-size: 12px; color: #5c5c5c; background: #efefef; border-radius: 10px; padding: 1px 8px">9 / 12</span></button>
+        <button role="tab" aria-selected="true" style="height: 40px; box-sizing: border-box; padding: 0 18px; border: 1px solid #e5e5e5; border-bottom-color: #ffffff; border-radius: 6px 6px 0 0; background: #ffffff; margin-bottom: -1px; font: inherit; font-weight: 700; color: #1c1c1c; display: flex; align-items: center; gap: 8px">グラフ<span style="font-size: 12px; font-weight: 400; color: #5c5c5c; background: #efefef; border-radius: 10px; padding: 1px 8px">2</span></button>
+        <span class="cap" style="margin-left: auto; padding-bottom: 10px">選択肢は「採用中の項目のラベル」</span>
+      </div>
+      <div style="flex-grow: 1; min-height: 0; background: #ffffff; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 6px 6px; padding: 16px; overflow: hidden; display: flex; flex-direction: column; gap: 12px">
+
+        <div style="border: 1px solid #e5e5e5; border-radius: 6px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; justify-content: space-between; height: 28px">
+            <span style="font-weight: 700">グラフ 1</span>
+            <button class="btn sm">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#1c1c1c" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h9"></path><path d="M5.5 4V2.5h3V4"></path><path d="M3.5 4l.6 7.5h5.8l.6-7.5"></path></svg>
+              削除
+            </button>
+          </div>
+          <div style="display: grid; grid-template-columns: 150px repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 8px; align-items: center">
+            <span>横軸</span>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ1 横軸"><span>time(ms)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <span></span>
+            <span>第1軸（左）<span class="cap" style="margin-left: 4px">2つまで</span></span>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ1 第1軸 1つ目"><span>電圧(mV)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <button class="cb none" aria-haspopup="listbox" aria-label="グラフ1 第1軸 2つ目"><span>なし</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <span>第2軸（右）<span class="cap" style="margin-left: 4px">2つまで</span></span>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ1 第2軸 1つ目"><span>電流(mA)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <button class="cb none" aria-haspopup="listbox" aria-label="グラフ1 第2軸 2つ目"><span>なし</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e5e5e5; border-radius: 6px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; justify-content: space-between; height: 28px">
+            <span style="font-weight: 700">グラフ 2</span>
+            <button class="btn sm">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#1c1c1c" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h9"></path><path d="M5.5 4V2.5h3V4"></path><path d="M3.5 4l.6 7.5h5.8l.6-7.5"></path></svg>
+              削除
+            </button>
+          </div>
+          <div style="display: grid; grid-template-columns: 150px repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 8px; align-items: center">
+            <span>横軸</span>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ2 横軸"><span>経過時間(s)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <span></span>
+            <span>第1軸（左）<span class="cap" style="margin-left: 4px">2つまで</span></span>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ2 第1軸 1つ目"><span>SOC(％)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ2 第1軸 2つ目"><span>CAP(mAh)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <span>第2軸（右）<span class="cap" style="margin-left: 4px">2つまで</span></span>
+            <button class="cb" aria-haspopup="listbox" aria-label="グラフ2 第2軸 1つ目"><span>温度(℃)</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+            <button class="cb none" aria-haspopup="listbox" aria-label="グラフ2 第2軸 2つ目"><span>なし</span><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#5c5c5c" stroke-width="1.4"><path d="M3 4.5l3 3 3-3"></path></svg></button>
+          </div>
+        </div>
+
+        <div>
+          <button class="btn">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#005fb8" stroke-width="1.8" stroke-linecap="round"><path d="M7 2.5v9"></path><path d="M2.5 7h9"></path></svg>
+            グラフを追加
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div style="height: 64px; flex-shrink: 0; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; gap: 16px; border-top: 1px solid #e5e5e5; background: #f3f3f3">
+    <button class="btn">初期値に戻す</button>
+    <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #0e700e">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#0e700e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.2"></path></svg>
+      エラーはありません
+    </span>
+    <div style="margin-left: auto; display: flex; gap: 8px">
+      <button class="btn" style="width: 96px">戻る</button>
+      <button class="btn accent" style="width: 148px">Excelに出力</button>
+    </div>
+  </div>
+</div>
+</body></html>

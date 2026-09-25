@@ -1,0 +1,116 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>補助ウィンドウ・ダイアログ</title></head><body>
+
+
+<style>
+body{margin:0;font-family:"Segoe UI","Yu Gothic UI","Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;color:#1c1c1c;background:#e8e8e8;font-size:14px}
+.in{box-sizing:border-box;height:30px;padding:0 10px;border:1px solid #e5e5e5;border-bottom-color:#8a8a8a;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;min-width:0;width:100%}
+.btn{box-sizing:border-box;height:32px;padding:0 16px;border:1px solid #e0e0e0;border-bottom-color:#c8c8c8;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap}
+.btn.accent{background:#005fb8;border-color:#005fb8;color:#ffffff;font-weight:600}
+.ps{width:22px;height:22px;border:1px solid #d1d1d1;padding:0;border-radius:2px;cursor:pointer;box-sizing:border-box}
+.h{font-size:12px;font-weight:700;color:#5c5c5c}
+.cap{font-size:12px;color:#5c5c5c}
+.win{background:#fafafa;border:1px solid #c8c8c8;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.tb{height:32px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 12px;font-size:12px;background:#f3f3f3;border-bottom:1px solid #e5e5e5}
+.x{width:40px;height:28px;border:none;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.th{background:#f3f3f3;font-size:12px;font-weight:700;color:#5c5c5c;height:30px;display:flex;align-items:center;padding:0 10px;border-bottom:1px solid #e0e0e0}
+.td{height:32px;display:flex;align-items:center;padding:0 10px;border-bottom:1px solid #f0f0f0;font-variant-numeric:tabular-nums}
+</style>
+
+<div style="width: 1120px; height: 640px; box-sizing: border-box; padding: 24px; background: #e8e8e8; display: flex; gap: 32px; overflow: hidden">
+
+  <!-- カラーパレット -->
+  <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
+    <div class="h">カラーパレット（色見本の下にポップアップ）</div>
+    <div style="background: #ffffff; border: 1px solid #e5e5e5; border-radius: 6px; padding: 0 12px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 44px; column-gap: 8px; align-items: center; height: 40px">
+      <span>voltage_mV</span>
+      <input class="in" aria-label="voltage_mV のラベル" value="電圧(mV)">
+      <button aria-label="voltage_mV の色" style="width: 44px; height: 24px; border: 2px solid #005fb8; border-radius: 3px; padding: 0; background: #a5a5a5"></button>
+    </div>
+    <div role="dialog" aria-label="グラフの色" style="background: #ffffff; border: 1px solid #c8c8c8; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #ececec">
+        <span style="width: 36px; height: 24px; border-radius: 3px; border: 1px solid #bdbdbd; background: #a5a5a5"></span>
+        <span style="display: flex; flex-direction: column"><span style="font-size: 12px; color: #5c5c5c">現在の色</span><span style="font-weight: 700; font-variant-numeric: tabular-nums">#A5A5A5</span></span>
+        <span class="cap" style="margin-left: auto">Esc で閉じる</span>
+      </div>
+      <div class="h">テーマの色</div>
+      <div style="display: grid; grid-template-columns: repeat(10, 22px); column-gap: 4px; row-gap: 4px">
+        <button class="ps" aria-label="#ffffff" style="background: #ffffff; "></button><button class="ps" aria-label="#000000" style="background: #000000; "></button><button class="ps" aria-label="#e7e6e6" style="background: #e7e6e6; "></button><button class="ps" aria-label="#44546a" style="background: #44546a; "></button><button class="ps" aria-label="#4472c4" style="background: #4472c4; "></button><button class="ps" aria-label="#ed7d31" style="background: #ed7d31; "></button><button class="ps" aria-label="#a5a5a5" style="background: #a5a5a5; outline: 2px solid #005fb8; outline-offset: 2px"></button><button class="ps" aria-label="#ffc000" style="background: #ffc000; "></button><button class="ps" aria-label="#5b9bd5" style="background: #5b9bd5; "></button><button class="ps" aria-label="#70ad47" style="background: #70ad47; "></button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(10, 22px); column-gap: 4px; row-gap: 0">
+        <button class="ps" aria-label="#f2f2f2" style="background: #f2f2f2; border-radius: 0"></button><button class="ps" aria-label="#808080" style="background: #808080; border-radius: 0"></button><button class="ps" aria-label="#d0cece" style="background: #d0cece; border-radius: 0"></button><button class="ps" aria-label="#d6dce4" style="background: #d6dce4; border-radius: 0"></button><button class="ps" aria-label="#d9e2f3" style="background: #d9e2f3; border-radius: 0"></button><button class="ps" aria-label="#fbe5d5" style="background: #fbe5d5; border-radius: 0"></button><button class="ps" aria-label="#ededed" style="background: #ededed; border-radius: 0"></button><button class="ps" aria-label="#fff2cc" style="background: #fff2cc; border-radius: 0"></button><button class="ps" aria-label="#deeaf6" style="background: #deeaf6; border-radius: 0"></button><button class="ps" aria-label="#e2efd9" style="background: #e2efd9; border-radius: 0"></button><button class="ps" aria-label="#d9d9d9" style="background: #d9d9d9; border-radius: 0"></button><button class="ps" aria-label="#595959" style="background: #595959; border-radius: 0"></button><button class="ps" aria-label="#aeabab" style="background: #aeabab; border-radius: 0"></button><button class="ps" aria-label="#adb9ca" style="background: #adb9ca; border-radius: 0"></button><button class="ps" aria-label="#b4c6e7" style="background: #b4c6e7; border-radius: 0"></button><button class="ps" aria-label="#f7cbac" style="background: #f7cbac; border-radius: 0"></button><button class="ps" aria-label="#dbdbdb" style="background: #dbdbdb; border-radius: 0"></button><button class="ps" aria-label="#fee599" style="background: #fee599; border-radius: 0"></button><button class="ps" aria-label="#bdd7ee" style="background: #bdd7ee; border-radius: 0"></button><button class="ps" aria-label="#c5e0b3" style="background: #c5e0b3; border-radius: 0"></button><button class="ps" aria-label="#bfbfbf" style="background: #bfbfbf; border-radius: 0"></button><button class="ps" aria-label="#404040" style="background: #404040; border-radius: 0"></button><button class="ps" aria-label="#757171" style="background: #757171; border-radius: 0"></button><button class="ps" aria-label="#8497b0" style="background: #8497b0; border-radius: 0"></button><button class="ps" aria-label="#8eaadb" style="background: #8eaadb; border-radius: 0"></button><button class="ps" aria-label="#f4b183" style="background: #f4b183; border-radius: 0"></button><button class="ps" aria-label="#c9c9c9" style="background: #c9c9c9; border-radius: 0"></button><button class="ps" aria-label="#ffd965" style="background: #ffd965; border-radius: 0"></button><button class="ps" aria-label="#9cc3e5" style="background: #9cc3e5; border-radius: 0"></button><button class="ps" aria-label="#a8d08d" style="background: #a8d08d; border-radius: 0"></button><button class="ps" aria-label="#a6a6a6" style="background: #a6a6a6; border-radius: 0"></button><button class="ps" aria-label="#262626" style="background: #262626; border-radius: 0"></button><button class="ps" aria-label="#3a3838" style="background: #3a3838; border-radius: 0"></button><button class="ps" aria-label="#333f4f" style="background: #333f4f; border-radius: 0"></button><button class="ps" aria-label="#2f5496" style="background: #2f5496; border-radius: 0"></button><button class="ps" aria-label="#c55a11" style="background: #c55a11; border-radius: 0"></button><button class="ps" aria-label="#7b7b7b" style="background: #7b7b7b; border-radius: 0"></button><button class="ps" aria-label="#bf9000" style="background: #bf9000; border-radius: 0"></button><button class="ps" aria-label="#2e75b5" style="background: #2e75b5; border-radius: 0"></button><button class="ps" aria-label="#538135" style="background: #538135; border-radius: 0"></button><button class="ps" aria-label="#808080" style="background: #808080; border-radius: 0"></button><button class="ps" aria-label="#0d0d0d" style="background: #0d0d0d; border-radius: 0"></button><button class="ps" aria-label="#161616" style="background: #161616; border-radius: 0"></button><button class="ps" aria-label="#222a35" style="background: #222a35; border-radius: 0"></button><button class="ps" aria-label="#1f3864" style="background: #1f3864; border-radius: 0"></button><button class="ps" aria-label="#833c0b" style="background: #833c0b; border-radius: 0"></button><button class="ps" aria-label="#525252" style="background: #525252; border-radius: 0"></button><button class="ps" aria-label="#7f6000" style="background: #7f6000; border-radius: 0"></button><button class="ps" aria-label="#1f4e79" style="background: #1f4e79; border-radius: 0"></button><button class="ps" aria-label="#375623" style="background: #375623; border-radius: 0"></button>
+      </div>
+      <div class="h" style="margin-top: 2px">標準の色</div>
+      <div style="display: grid; grid-template-columns: repeat(10, 22px); column-gap: 4px">
+        <button class="ps" aria-label="#c00000" style="background: #c00000; "></button><button class="ps" aria-label="#ff0000" style="background: #ff0000; "></button><button class="ps" aria-label="#ffc000" style="background: #ffc000; "></button><button class="ps" aria-label="#ffff00" style="background: #ffff00; "></button><button class="ps" aria-label="#92d050" style="background: #92d050; "></button><button class="ps" aria-label="#00b050" style="background: #00b050; "></button><button class="ps" aria-label="#00b0f0" style="background: #00b0f0; "></button><button class="ps" aria-label="#0070c0" style="background: #0070c0; "></button><button class="ps" aria-label="#002060" style="background: #002060; "></button><button class="ps" aria-label="#7030a0" style="background: #7030a0; "></button>
+      </div>
+      <button class="btn" style="width: 100%; margin-top: 2px">その他の色…</button>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 32px">
+    <!-- 欠落の詳細 -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div class="h">欠落の詳細（別ウィンドウ）</div>
+      <div class="win" style="height: 272px">
+        <div class="tb"><span>欠落の詳細</span><button class="x" aria-label="閉じる"><svg width="10" height="10" viewBox="0 0 10 10" stroke="#1c1c1c" stroke-width="1.2"><path d="M1 1l8 8M9 1l-8 8"></path></svg></button></div>
+        <div style="flex-grow: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: baseline; gap: 12px">
+            <span style="font-size: 16px; font-weight: 700">欠落 1箇所</span>
+            <span class="cap">補完した行は合計 2行（Excel では空欄）</span>
+          </div>
+          <div style="border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; background: #ffffff; flex-grow: 1">
+            <div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1fr) 96px">
+              <div class="th" style="justify-content: flex-end">No</div>
+              <div class="th">欠落直前の行（行番号・時刻）</div>
+              <div class="th">欠落直後の行（行番号・時刻）</div>
+              <div class="th" style="justify-content: flex-end">補完行数</div>
+              <div class="td" style="justify-content: flex-end">1</div>
+              <div class="td" style="gap: 12px"><span>13行目</span><span>09:10:05.080</span></div>
+              <div class="td" style="gap: 12px"><span>14行目</span><span>09:10:08.080</span></div>
+              <div class="td" style="justify-content: flex-end; font-weight: 700">2</div>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end"><button class="btn" style="width: 96px">閉じる</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+      <!-- 出力中 -->
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div class="h">出力中（閉じるボタンなし）</div>
+        <div class="win">
+          <div class="tb" style="height: 32px"><span>出力中</span></div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-weight: 700">Excel ファイルを出力しています</span>
+            <span class="cap" style="font-variant-numeric: tabular-nums">ロガーの元データを書き込み中… 150,000 / 500,000 行</span>
+            <div role="progressbar" aria-label="出力の進み具合" style="height: 4px; border-radius: 2px; background: #e0e0e0; position: relative; overflow: hidden; margin-top: 6px">
+              <div style="position: absolute; left: 32%; width: 22%; top: 0; bottom: 0; background: #005fb8; border-radius: 2px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 完了 -->
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div class="h">完了</div>
+        <div class="win">
+          <div class="tb"><span>完了</span><button class="x" aria-label="閉じる"><svg width="10" height="10" viewBox="0 0 10 10" stroke="#1c1c1c" stroke-width="1.2"><path d="M1 1l8 8M9 1l-8 8"></path></svg></button></div>
+          <div style="padding: 20px; display: flex; gap: 14px">
+            <svg width="32" height="32" viewBox="0 0 32 32" style="flex-shrink: 0"><circle cx="16" cy="16" r="15" fill="#0e700e"></circle><path d="M9.5 16.5l4.5 4.5 8.5-9" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+              <span style="font-size: 16px; font-weight: 700">Excel ファイルを出力しました</span>
+              <span style="font-weight: 700; word-break: break-all">解析_260924-090954.xlsx</span>
+              <span class="cap">保存先：C:\data\</span>
+            </div>
+          </div>
+          <div style="padding: 12px 16px; background: #f3f3f3; border-top: 1px solid #e5e5e5; display: flex; justify-content: flex-end; gap: 8px">
+            <button class="btn accent">フォルダを開く</button>
+            <button class="btn" style="width: 80px">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>

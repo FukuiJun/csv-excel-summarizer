@@ -44,8 +44,10 @@ def test_screen2_flow(app, tmp_path):
     f = _load(app)
     assert f is not None
     assert f.uart_int.get() == "1000" and f.logger_int.get() == "200"
-    assert "欠落：1箇所（2行" in f.gap_label.cget("text")
-    assert "出力予定 10行" in f.mode_label.cget("text")
+    assert "欠落 1箇所（2行" in f.gap_label_text
+    assert "出力予定 10 行" in f.mode_label.cget("text")
+    # 画面2のヘッダー：現在のステップと読み込んだファイル名
+    assert "a" in app.header_note.cget("text") or ".csv" in app.header_note.cget("text")
     assert f.validate() == []
     assert f.filename.get() == "解析_260924-090954.xlsx"
     assert f.folder.get() == str(tmp_path)
@@ -71,7 +73,7 @@ def test_screen2_flow(app, tmp_path):
     assert f.export_btn.instate(["disabled"])
     f.uart_int.set("500")
     f.recalc()
-    assert "ロガー基準" not in f.mode_label.cget("text")
+    assert "ロガー基準" not in f.mode_line1.cget("text")
     f.uart_int.set("1000")
     f.recalc()
 
@@ -156,24 +158,102 @@ def test_screen2_flow(app, tmp_path):
     assert os.path.exists(path)
 
 
-def test_label_entry_does_not_stretch_and_page_scrolls(app):
+def test_layout_and_separate_scroll(app):
     app.deiconify()
-    app.geometry("900x400")
+    app.geometry("960x560")  # 最小サイズ
     f = _load(app)
     app.update()
-    label_e = f.item_rows[0].label_e
-    assert label_e.winfo_width() < 300  # ウィンドウ幅に合わせて伸びない
+    # ラベル欄は最大 320px（ウィンドウ幅に合わせて無制限には伸びない）
+    assert f.item_rows[0].label_e.winfo_width() <= 330
+    # フッターのボタンは常に見えている
+    assert f.export_btn.winfo_ismapped() and f.back_btn.winfo_ismapped()
 
-    # 小さいウィンドウでもボタンは常に見えている
-    assert f.export_btn.winfo_ismapped()
-    # ホイールで画面全体が下にスクロールする（Entry の上でも効く）
-    top_before = f.page.canvas.yview()[0]
-    ev = type("E", (), {"widget": label_e, "num": 5, "delta": 0})()
-    for _ in range(20):
-        f.page._on_wheel(ev)
+    # サイドバーと項目の表は別々にスクロールする（ホイールはカーソルの下の領域だけ）
+    ev = type("E", (), {"widget": f.item_rows[0].label_e, "num": 5, "delta": 0,
+                        "x_root": f.item_rows[0].label_e.winfo_rootx() + 2,
+                        "y_root": f.item_rows[0].label_e.winfo_rooty() + 2})()
+    side_before = f.side.canvas.yview()[0]
+    items_before = f.items_area.canvas.yview()[0]
+    for _ in range(10):
+        app._on_wheel(ev)
     app.update()
-    assert f.page.canvas.yview()[0] > top_before
-    assert f.page.canvas.yview()[1] == pytest.approx(1.0)  # 一番下（出力先）まで届く
+    assert f.items_area.canvas.yview()[0] > items_before
+    assert f.side.canvas.yview()[0] == side_before
+
+
+def test_offset_section_toggle_and_error_navigation(app):
+    app.deiconify()
+    f = _load(app)
+    # 折りたたむと要約 1 行になり、開閉状態は設定に入る（出力成功時に保存）
+    f.toggle_offset(False)
+    app.update()
+    assert not f.offset_body.winfo_manager() and f.offset_summary.winfo_manager()
+    assert "間隔 1000 / 200 ms" in f.offset_summary.cget("text")
+    assert app.cfg["offset_section_open"] is False
+    # エラーがあると自動で開き、見出し右に件数
+    f.uart_int.set("0")
+    f.recalc()
+    app.update()
+    assert f.offset_open and "1件" in f.offset_status.cget("text")
+    assert "計算できません" in f.mode_label.cget("text")
+    f.uart_int.set("1000")
+    f.recalc()
+
+    # 項目のエラー：行の背景・状態列・タブのバッジ・フッター一覧
+    rows = {r.key: r for r in f.item_rows}
+    rows["CH1"].coef.set("abc")
+    app.update()
+    assert rows["CH1"].state_ == "error" and "係数" in rows["CH1"].status.cget("text")
+    assert f.nb.tabs[0]["count"] == "エラー 1" and f.nb.tabs[0]["error"]
+    assert f.err_panel.winfo_manager()
+    err = f.errors[0]
+    assert err.place == "項目 › CH1"
+    # 場所チップをクリック：グラフタブを開いていても項目タブに切り替え、入力欄にフォーカス
+    f.nb.select(1)
+    f.goto_error(err)
+    app.update()
+    assert f.nb.select() == 0
+    # ウィンドウマネージャーのない環境でも確認できるよう「このウィンドウで最後にフォーカスした部品」を見る
+    assert str(app.tk.call("focus", "-lastfor", str(app))) == str(rows["CH1"].coef_e)
+    rows["CH1"].coef.set("1")
+    app.update()
+    assert not f.err_panel.winfo_manager()
+    assert "警告 1件" in f.status_lb.cget("text")  # fixture のデータには欠落がある（警告のみ）
+
+    # 採用チェックでタブのバッジとグループ見出しの件数が即更新
+    before = f.nb.tabs[0]["count"]
+    rows["CH2"].enabled.set(False)
+    app.update()
+    assert f.nb.tabs[0]["count"] != before
+    assert "2CH中 1CHを出力" in f.group_labels["logger"].cget("text")
+
+
+def test_warning_only_allows_export(app, tmp_path):
+    # 欠落があるデータ（fixture）は警告のみ：出力ボタンは有効
+    f = _load(app)
+    assert f.warnings and not f.errors
+    assert "警告" in f.status_lb.cget("text")
+    assert not f.export_btn.instate(["disabled"])
+
+
+def test_dark_theme(tmp_path):
+    import json
+
+    import gui
+
+    (tmp_path / "config.json").write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    try:
+        a = gui.App(config_path=str(tmp_path / "config.json"))
+    except tk.TclError:
+        pytest.skip("ディスプレイがありません")
+    try:
+        assert a.theme.name == "dark"
+        assert a.cget("bg").upper() == "#1C1C1C"
+        a.set_theme("light")
+        assert a.cget("bg").upper() == "#FAFAFA"
+        assert a.select_frame.cget("bg").upper() == "#FAFAFA"
+    finally:
+        a.destroy()
 
 
 def test_drop_files(app, tmp_path):

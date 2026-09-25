@@ -1,0 +1,72 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>画面1 ファイル選択</title></head><body>
+
+
+<style>
+body{margin:0;font-family:"Segoe UI","Yu Gothic UI","Noto Sans CJK JP","Noto Sans JP",system-ui,sans-serif;color:#1c1c1c;background:#fafafa;font-size:14px}
+.in{box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #e5e5e5;border-bottom-color:#8a8a8a;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;min-width:0}
+.btn{box-sizing:border-box;height:32px;padding:0 16px;border:1px solid #e0e0e0;border-bottom-color:#c8c8c8;border-radius:4px;background:#ffffff;font:inherit;color:#1c1c1c;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap}
+.btn.accent{background:#005fb8;border-color:#005fb8;color:#ffffff;font-weight:600}
+a{color:#005fb8}a:hover{color:#003e92}
+</style>
+
+<div style="width: 1120px; height: 720px; display: flex; flex-direction: column; background: #fafafa; overflow: hidden">
+  <!-- ヘッダー -->
+  <div style="height: 56px; flex-shrink: 0; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5e5e5">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 12px; background: #005fb8; color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span>
+        <span style="font-size: 16px; font-weight: 700">ファイル選択</span>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#a0a0a0" stroke-width="1.5"><path d="M6 3l5 5-5 5"></path></svg>
+      <div style="display: flex; align-items: center; gap: 8px; color: #5c5c5c">
+        <span style="width: 24px; height: 24px; border-radius: 12px; border: 1px solid #c8c8c8; box-sizing: border-box; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span>
+        <span style="font-size: 14px">出力内容の調整</span>
+      </div>
+    </div>
+    <span style="font-size: 12px; color: #5c5c5c">設定は前回の値を引き継ぎます</span>
+  </div>
+
+  <!-- 本体 -->
+  <div style="flex-grow: 1; display: flex; justify-content: center; padding-top: 40px; box-sizing: border-box">
+    <div style="width: 760px; display: flex; flex-direction: column; gap: 24px">
+      <!-- ドロップ領域 -->
+      <div style="height: 220px; box-sizing: border-box; border: 2px dashed #8fb3dc; border-radius: 8px; background: #f2f7fc; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#005fb8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M24 30V8"></path><path d="M15 17l9-9 9 9"></path><path d="M8 30v8a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2v-8"></path></svg>
+        <div style="font-size: 18px; font-weight: 700">CSV ファイルをここにドラッグ＆ドロップ</div>
+        <div style="font-size: 13px; color: #5c5c5c">2つ同時にドロップできます。中身から UART／ロガーを自動で振り分けます</div>
+      </div>
+
+      <!-- ファイル欄 -->
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: grid; grid-template-columns: 28px 132px minmax(0, 1fr) 88px; column-gap: 12px; align-items: center">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#0f7b0f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="入力済み"><circle cx="10" cy="10" r="8"></circle><path d="M6.5 10.2l2.4 2.3 4.6-4.8"></path></svg>
+          <label for="f-uart" style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-weight: 700">UART CSV</span>
+            <span style="font-size: 12px; color: #5c5c5c">マイコンからの受信データ</span>
+          </label>
+          <input id="f-uart" class="in" style="width: 100%" value="C:\data\log40.csv">
+          <button class="btn" style="width: 88px">参照…</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 28px 132px minmax(0, 1fr) 88px; column-gap: 12px; align-items: center">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#0f7b0f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="入力済み"><circle cx="10" cy="10" r="8"></circle><path d="M6.5 10.2l2.4 2.3 4.6-4.8"></path></svg>
+          <label for="f-logger" style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-weight: 700">ロガー CSV</span>
+            <span style="font-size: 12px; color: #5c5c5c">GRAPHTEC GL240</span>
+          </label>
+          <input id="f-logger" class="in" style="width: 100%" value="C:\data\260924-090155.CSV">
+          <button class="btn" style="width: 88px">参照…</button>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #5c5c5c; padding-left: 40px">欄の上にドロップするとその欄に、枠内の他の場所なら中身で自動判別して入ります。</div>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <div style="height: 64px; flex-shrink: 0; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; justify-content: flex-end; gap: 16px; border-top: 1px solid #e5e5e5; background: #f3f3f3">
+    <span style="font-size: 12px; color: #5c5c5c">2つとも入力すると読み込めます</span>
+    <button class="btn accent" style="width: 148px">読み込み
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"></path><path d="M9 4l4 4-4 4"></path></svg>
+    </button>
+  </div>
+</div>
+</body></html>

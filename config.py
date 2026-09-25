@@ -48,6 +48,8 @@ DEFAULT_CONFIG: dict = {
     "output_filename_format": "解析_{start:%y%m%d-%H%M%S}.xlsx",
     "row_warn_threshold": 100_000,
     "row_limit": 1_000_000,
+    "theme": "auto",  # auto（Windows の設定に追従）/ light / dark
+    "offset_section_open": True,  # 画面2「間隔・時間オフセット」の開閉状態
 }
 
 
@@ -136,6 +138,10 @@ def _normalize(raw: dict) -> dict:
         for k in ("uart", "logger"):
             if isinstance(raw["last_dirs"].get(k), str):
                 cfg["last_dirs"][k] = raw["last_dirs"][k]
+    if raw.get("theme") in ("auto", "light", "dark"):
+        cfg["theme"] = raw["theme"]
+    if isinstance(raw.get("offset_section_open"), bool):
+        cfg["offset_section_open"] = raw["offset_section_open"]
     for key in ("row_warn_threshold", "row_limit"):
         if _is_num(raw.get(key)) and raw[key] > 0:
             cfg[key] = int(raw[key])
