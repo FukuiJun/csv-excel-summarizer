@@ -247,3 +247,30 @@ def test_effective_x_unit():
     assert GraphSetting(["a"], [None], "elapsed_ms", "ms").effective_x_unit() is None
     assert GraphSetting(["a"], [None], "voltage_mV", "min").effective_x_unit() is None  # 時間の項目でない
     assert GraphSetting(["a"], [None], ELAPSED_KEY, "min").effective_x_unit() == "min"
+
+
+@pytest.mark.parametrize("only", ["uart", "logger"])
+def test_single_source_workbook(tmp_path, only):
+    u, lg, _ = _setup(tmp_path, gaps=True)
+    u, lg = (u, None) if only == "uart" else (None, lg)
+    r = merge(u, lg, 1000 if u else None, 200 if lg else None)
+    cfg = cfgmod.load_config(str(tmp_path / "none.json")).config
+    items, _ = cfgmod.build_items(cfg, u, lg)
+    graphs = cfgmod.build_graphs(cfg, items, single_source=True)
+    assert graphs and validate_graphs(graphs, items) == []
+    table = build_analysis_table(r, u, lg, items, "経過時間(s)")
+    out = str(tmp_path / "o.xlsx")
+    write_workbook(out, table, u, lg, graphs)
+    wb = openpyxl.load_workbook(out)
+    raw = "u" if only == "uart" else "l"
+    assert wb.sheetnames == ["解析", "グラフ", raw]
+    vals = _values(wb["解析"])
+    flat = [v for row in vals for v in row if v is not None]
+    if only == "uart":
+        assert "マイコン内部データ(UART)" in flat and "（ロガーなし）" in flat and "測定値" not in flat
+        assert len(r.rows) == 10 and sum(x.is_gap for x in r.rows) == 2  # 8 行 + 欠落 2 行を補完
+    else:
+        assert "GL240" in flat and "マイコン内部データ(UART)" not in flat
+        assert len(r.rows) == 60
+        assert r.rows[1].t_ms == 200
+    assert len(wb["グラフ"]._charts) == len(graphs)

@@ -224,11 +224,13 @@ class App(tk.Tk):
         self.select_frame.pack(fill="both", expand=True)
         self.set_step(1, "設定は前回の値を引き継ぎます")
 
-    def show_adjust(self, uart: UartData, logger: LoggerData) -> None:
+    def show_adjust(self, uart: UartData | None, logger: LoggerData | None) -> None:
         self.select_frame.pack_forget()
         self.adjust_frame = AdjustFrame(self, uart, logger)
         self.adjust_frame.pack(fill="both", expand=True)
-        self.set_step(2, f"{os.path.basename(uart.path)} ＋ {os.path.basename(logger.path)}")
+        names = [os.path.basename(d.path) for d in (uart, logger) if d is not None]
+        note = " ＋ ".join(names) + ("（UART のみ）" if logger is None else "（ロガーのみ）" if uart is None else "")
+        self.set_step(2, note)
 
     def set_theme(self, name: str) -> None:
         """テーマを切り替える（tk 系部品の色もまとめて塗り直す）。"""

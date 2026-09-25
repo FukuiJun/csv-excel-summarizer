@@ -11,6 +11,7 @@ import math
 import os
 import queue
 import threading
+from datetime import datetime
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import filedialog, messagebox, ttk
@@ -326,7 +327,8 @@ class GraphRow:
 
 
 class AdjustFrame(tk.Frame):
-    def __init__(self, app, uart: UartData, logger: LoggerData):
+    def __init__(self, app, uart: UartData | None, logger: LoggerData | None):
+        """uart・logger のどちらかは None でもよい（片方だけ読み込んで出力する）。"""
         super().__init__(app.content, bd=0, highlightthickness=0)
         th = self.th = app.theme
         th.paint(self, bg="bg")
@@ -345,7 +347,8 @@ class AdjustFrame(tk.Frame):
 
         items, self.unit_warnings = cfgmod.build_items(app.cfg, uart, logger)
         self.unit_changed = {w.split(" ", 1)[0] for w in self.unit_warnings}
-        graphs = cfgmod.build_graphs(app.cfg, items)
+        self.single = uart is None or logger is None
+        graphs = cfgmod.build_graphs(app.cfg, items, single_source=self.single)
         self.elapsed_var = tk.StringVar(value=cfgmod.elapsed_label(app.cfg))
 
         self._build_footer()
@@ -392,26 +395,38 @@ class AdjustFrame(tk.Frame):
         tiles.columnconfigure(0, weight=1, uniform="t")
         tiles.columnconfigure(1, weight=1, uniform="t")
         u, lg = self.uart, self.logger
-        t1 = self._tile(tiles, "UART", u.row_count,
-                        [f"{u.timestamps[0]:%H:%M:%S}〜{u.timestamps[-1]:%H:%M:%S}"])
-        self.uart_dup_lb = label(t1, th, "", font="caption", fg="text2", bg="tile")
-        self.uart_dup_lb.pack(anchor="w")
-        self._uart_skip = u.skipped
+        self.uart_dup_lb = None
+        self._uart_skip = 0
+        if u is not None:
+            t1 = self._tile(tiles, "UART", u.row_count,
+                            [f"{u.timestamps[0]:%H:%M:%S}〜{u.timestamps[-1]:%H:%M:%S}"])
+            self.uart_dup_lb = label(t1, th, "", font="caption", fg="text2", bg="tile")
+            self.uart_dup_lb.pack(anchor="w")
+            self._uart_skip = u.skipped
+        else:
+            t1 = self._tile(tiles, "UART", None, ["読み込んでいません"])
         t1.master.grid(row=0, column=0, sticky="nsew", padx=(0, th.px(4)))
-        t2 = self._tile(tiles, f"ロガー {lg.model or '(モデル不明)'}", lg.row_count,
-                        [f"{len(lg.channels)}CH", f"測定間隔 {lg.interval_ms:g}ms" if lg.interval_ms else "測定間隔 不明"])
+        if lg is not None:
+            t2 = self._tile(tiles, f"ロガー {lg.model or '(モデル不明)'}", lg.row_count,
+                            [f"{len(lg.channels)}CH",
+                             f"測定間隔 {lg.interval_ms:g}ms" if lg.interval_ms else "測定間隔 不明"])
+        else:
+            t2 = self._tile(tiles, "ロガー", None, ["読み込んでいません"])
         t2.master.grid(row=0, column=1, sticky="nsew", padx=(th.px(4), 0))
         self.bands = frame(s, th, "surface")
         self.bands.pack(fill="x")
 
-    def _tile(self, parent, title: str, rows: int, lines: list[str]) -> tk.Frame:
+    def _tile(self, parent, title: str, rows: int | None, lines: list[str]) -> tk.Frame:
         th = self.th
         _, inner = boxed(parent, th, "tile", "border", pad=(8, 12))
         label(inner, th, title, font="caption", fg="text2", bg="tile").pack(anchor="w")
         st = frame(inner, th, "tile")
         st.pack(anchor="w")
-        label(st, th, f"{rows:,}", font="stat", bg="tile").pack(side="left")
-        label(st, th, " 行", font="small_body", bg="tile").pack(side="left", anchor="s", pady=(0, th.px(3)))
+        if rows is None:  # 読み込んでいないファイル
+            label(st, th, "―", font="stat", fg="disabled", bg="tile").pack(side="left")
+        else:
+            label(st, th, f"{rows:,}", font="stat", bg="tile").pack(side="left")
+            label(st, th, " 行", font="small_body", bg="tile").pack(side="left", anchor="s", pady=(0, th.px(3)))
         for ln in lines:
             label(inner, th, ln, font="caption", fg="text2", bg="tile").pack(anchor="w")
         return inner
@@ -487,11 +502,12 @@ class AdjustFrame(tk.Frame):
         cg, rg = th.px(og["col_gap"]), th.px(og["row_gap"])
         label(g, th, "UART", font="caption", fg="text2", bg="surface").grid(row=0, column=1, sticky="w")
         label(g, th, "ロガー", font="caption", fg="text2", bg="surface").grid(row=0, column=2, sticky="w", padx=(cg, 0))
-        self.uart_int = tk.StringVar(value=str(default_uart_interval(self.uart.timestamps)))
-        li = self.logger.interval_ms
-        self.logger_int = tk.StringVar(value=_fmt_num(li) if li else "")
-        self.uart_off = tk.StringVar(value="0")
-        self.logger_off = tk.StringVar(value="0")
+        # 読み込んでいない方の欄は「―」で無効にする
+        self.uart_int = tk.StringVar(value=str(default_uart_interval(self.uart.timestamps)) if self.uart else "―")
+        li = self.logger.interval_ms if self.logger else None
+        self.logger_int = tk.StringVar(value=(_fmt_num(li) if li else "") if self.logger else "―")
+        self.uart_off = tk.StringVar(value="0" if self.uart else "―")
+        self.logger_off = tk.StringVar(value="0" if self.logger else "―")
         entries = []
         for r, (name, a, b) in enumerate((("間隔", self.uart_int, self.logger_int),
                                           ("オフセット", self.uart_off, self.logger_off)), start=1):
@@ -504,6 +520,10 @@ class AdjustFrame(tk.Frame):
                                                                            pady=(rg, 0), padx=(th.px(6), 0))
             entries += [e1, e2]
         self.uart_int_e, self.logger_int_e, self.uart_off_e, self.logger_off_e = entries
+        for e, present in ((self.uart_int_e, self.uart), (self.uart_off_e, self.uart),
+                           (self.logger_int_e, self.logger), (self.logger_off_e, self.logger)):
+            if present is None:
+                e.state(["disabled"])
         self._wrap_labels = [label(self.offset_body, th, "＋で遅らせる　例：ロガーが1秒早い → ロガーに 1000",
                                    font="caption", fg="text2", bg="surface")]
         self._wrap_labels[0].pack(anchor="w", pady=(th.px(6), 0))
@@ -571,8 +591,13 @@ class AdjustFrame(tk.Frame):
         label(s, th, "フォルダ", font="caption", fg="text2", bg="surface").pack(anchor="w", pady=(th.px(6), th.px(2)))
         row = frame(s, th, "surface")
         row.pack(fill="x")
-        self.folder = tk.StringVar(value=os.path.dirname(os.path.abspath(self.uart.path)))
-        self.filename = tk.StringVar(value=cfgmod.make_output_filename(self.app.cfg, self.uart.timestamps[0]))
+        base = self.uart or self.logger
+        if self.uart is not None:
+            start = self.uart.timestamps[0]
+        else:
+            start = self.logger.start_time or datetime.now()
+        self.folder = tk.StringVar(value=os.path.dirname(os.path.abspath(base.path)))
+        self.filename = tk.StringVar(value=cfgmod.make_output_filename(self.app.cfg, start))
         box, _ = sized(row, th, lambda p: ttk.Button(p, text="参照…", command=self.browse_folder), 76, 30, bg="surface")
         box.pack(side="right", padx=(th.px(8), 0))
         self.folder_e = ttk.Entry(row, textvariable=self.folder, width=1)
@@ -700,7 +725,8 @@ class AdjustFrame(tk.Frame):
             self._elapsed_traced = True
 
         self.group_labels = {}
-        for src, title in ((SOURCE_UART, "UART"), (SOURCE_LOGGER, f"ロガー {self.logger.model}".strip())):
+        logger_title = f"ロガー {self.logger.model}".strip() if self.logger else "ロガー"
+        for src, title in ((SOURCE_UART, "UART"), (SOURCE_LOGGER, logger_title)):
             group = [it for it in items if it.source == src]
             if not group:
                 continue
@@ -861,6 +887,13 @@ class AdjustFrame(tk.Frame):
     def offsets(self) -> tuple[float | None, float | None]:
         return _parse_float(self.uart_off.get()), _parse_float(self.logger_off.get())
 
+    def _bad_inputs(self) -> tuple[tuple[bool, bool], tuple[bool, bool]]:
+        """間隔・オフセットの入力エラー（(UART, ロガー) ごと）。読み込んでいない方は対象外。"""
+        u, lg = self.intervals()
+        uo, lo = self.offsets()
+        has_u, has_l = self.uart is not None, self.logger is not None
+        return ((has_u and not u, has_l and not lg), (has_u and uo is None, has_l and lo is None))
+
     def schedule_recalc(self) -> None:
         self._update_offset_summary()
         if self._recalc_job is not None:
@@ -871,31 +904,40 @@ class AdjustFrame(tk.Frame):
         self._recalc_job = None
         self._update_offset_summary()
         u, lg = self.intervals()
-        mark(self.uart_int_e, u)
-        mark(self.logger_int_e, lg)
         uo, lo = self.offsets()
-        mark(self.uart_off_e, uo is not None)
-        mark(self.logger_off_e, lo is not None)
+        bad_int, bad_off = self._bad_inputs()
+        mark(self.uart_int_e, not bad_int[0])
+        mark(self.logger_int_e, not bad_int[1])
+        mark(self.uart_off_e, not bad_off[0])
+        mark(self.logger_off_e, not bad_off[1])
         self.row_level = "ok"
-        if not u or not lg or uo is None or lo is None:
+        if any(bad_int) or any(bad_off):
             self.result = None
-            msg = "間隔を正の数値で入力してください。" if not u or not lg else "時間オフセットを数値で入力してください。"
+            msg = "間隔を正の数値で入力してください。" if any(bad_int) else "時間オフセットを数値で入力してください。"
             self._set_result_box("error", "⚠ " + msg, "出力予定の行数は計算できません")
-            self.uart_dup_lb.configure(text=f"スキップ {self._uart_skip:,}")
+            if self.uart_dup_lb is not None:
+                self.uart_dup_lb.configure(text=f"スキップ {self._uart_skip:,}")
             if not self.bands.winfo_children():
                 self._update_bands(None)
             self.validate()
             return
-        tl = build_uart_timeline(self.uart, u)
-        self.result = merge(self.uart, self.logger, u, lg, timeline=tl, uart_offset_ms=uo, logger_offset_ms=lo)
-        self.uart_dup_lb.configure(text=f"スキップ {self._uart_skip:,} ・ 重複 {tl.duplicates:,}")
+        tl = build_uart_timeline(self.uart, u) if self.uart is not None else None
+        self.result = merge(self.uart, self.logger, u, lg, timeline=tl, uart_offset_ms=uo or 0.0,
+                            logger_offset_ms=lo or 0.0)
+        if self.uart_dup_lb is not None:
+            self.uart_dup_lb.configure(text=f"スキップ {self._uart_skip:,} ・ 重複 {tl.duplicates:,}")
         self._update_bands(tl)
 
         n = len(self.result.rows)
         rows = max_sheet_rows(n, self.uart, self.logger)
         level = check_row_limit(rows, self.app.cfg["row_warn_threshold"], self.app.cfg["row_limit"])
         self.row_level = level
-        line1 = describe_mode(u, lg)
+        if self.logger is None:
+            line1 = "UART のみ（欠落を補完した全行を出力）"
+        elif self.uart is None:
+            line1 = "ロガーのみ（全行を出力）"
+        else:
+            line1 = describe_mode(u, lg)
         line2 = f"出力予定 {n:,} 行"
         if level != "ok":
             line2 += f"（最大シート {rows:,} 行）"
@@ -926,13 +968,12 @@ class AdjustFrame(tk.Frame):
         戻り値は現行と同じ文言のエラーメッセージの一覧。
         """
         errs: list[UiError] = []
-        u, lg = self.intervals()
-        if not u or not lg:
-            w = self.uart_int_e if not u else self.logger_int_e
+        bad_int, bad_off = self._bad_inputs()
+        if any(bad_int):
+            w = self.uart_int_e if bad_int[0] else self.logger_int_e
             errs.append(UiError("間隔・オフセット", "間隔が正しくありません。", "間隔が正しくありません。", w, None, "offset"))
-        uo, lo = self.offsets()
-        if uo is None or lo is None:
-            w = self.uart_off_e if uo is None else self.logger_off_e
+        if any(bad_off):
+            w = self.uart_off_e if bad_off[0] else self.logger_off_e
             errs.append(UiError("間隔・オフセット", "時間オフセットが数値ではありません。", "時間オフセットが数値ではありません。",
                                 w, None, "offset"))
 
@@ -1071,7 +1112,7 @@ class AdjustFrame(tk.Frame):
         ):
             return
         items, _ = cfgmod.build_items(self.app.cfg, self.uart, self.logger, use_saved=False)
-        graphs = cfgmod.build_graphs(self.app.cfg, items, use_saved=False)
+        graphs = cfgmod.build_graphs(self.app.cfg, items, use_saved=False, single_source=self.single)
         self.elapsed_var.set(cfgmod.elapsed_label(self.app.cfg, use_saved=False))
         self.set_items(items, graphs)
 
@@ -1123,8 +1164,8 @@ class AdjustFrame(tk.Frame):
 
         cfg = self.app.cfg
         config_path = self.app.config_path
-        uart_dir = os.path.dirname(os.path.abspath(self.uart.path))
-        logger_dir = os.path.dirname(os.path.abspath(self.logger.path))
+        uart_dir = os.path.dirname(os.path.abspath(self.uart.path)) if self.uart else None
+        logger_dir = os.path.dirname(os.path.abspath(self.logger.path)) if self.logger else None
 
         def worker():
             try:

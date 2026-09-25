@@ -266,3 +266,22 @@ def test_graph_x_unit_save_restore(tmp_path):
     p = tmp_path / "config.json"
     p.write_text(json.dumps({"graphs": [{"x": "elapsed_ms", "x_unit": "day", "primary": ["voltage_mV"]}]}), encoding="utf-8")
     assert cfgmod.build_graphs(cfgmod.load_config(str(p)).config, items)[0].x_unit is None  # 不正な単位
+
+
+def test_build_graphs_single_source_and_keep_saved_graphs(tmp_path):
+    from helpers import write_logger_csv
+    from logger_reader import read_logger_csv
+
+    lg = read_logger_csv(write_logger_csv(str(tmp_path / "l.CSV"), 10))
+    cfg = cfgmod.load_config(str(tmp_path / "none.json")).config
+    items, _ = cfgmod.build_items(cfg, None, lg)
+    graphs = cfgmod.build_graphs(cfg, items, single_source=True)
+    keys = {it.key for it in items}
+    for g in graphs:
+        assert g.primary[0] in keys
+        assert all(k in keys for k in g.series_keys())
+        assert g.x == ELAPSED_KEY
+    # 片方だけの出力ではグラフ設定を保存しない
+    new = cfgmod.apply_settings(cfg, items, graphs, "経過時間(s)", save_graphs=False)
+    assert new["graphs"] == cfg["graphs"]
+    assert cfgmod.make_output_filename(cfg, None).endswith(".xlsx")

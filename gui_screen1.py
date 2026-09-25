@@ -104,7 +104,7 @@ class FileSelectFrame(tk.Frame):
             T.SIZE["btn_primary_w"], T.SIZE["btn_h"], bg="surface",
         )
         box.pack(side="right", pady=th.px(16))
-        self.hint = label(inner, th, "2つとも入力すると読み込めます", font="caption", fg="text2", bg="surface")
+        self.hint = label(inner, th, "UART・ロガーのどちらか1つだけでも読み込めます", font="caption", fg="text2", bg="surface")
         self.hint.pack(side="right", padx=(0, th.px(16)))
 
         # ---- ドラッグ＆ドロップ ----
@@ -183,20 +183,26 @@ class FileSelectFrame(tk.Frame):
         lg = bool(self.app.logger_path.get().strip())
         self.uart_icon.set_visible(u)
         self.logger_icon.set_visible(lg)
-        self.load_btn.state(["!disabled"] if (u and lg) else ["disabled"])
+        # どちらか 1 つだけでも読み込める（片方だけの Excel を作る）
+        self.load_btn.state(["!disabled"] if (u or lg) else ["disabled"])
         if u and lg:
             self.hint.pack_forget()
-        elif not self.hint.winfo_manager():
-            self.hint.pack(side="right", padx=(0, self.th.px(16)))
+        else:
+            self.hint.configure(text="UART・ロガーのどちらか1つだけでも読み込めます" if not (u or lg)
+                                else ("UART だけで読み込みます（ロガーも入れるとまとめます）" if u
+                                      else "ロガーだけで読み込みます（UART も入れるとまとめます）"))
+            if not self.hint.winfo_manager():
+                self.hint.pack(side="right", padx=(0, self.th.px(16)))
 
     def load(self) -> None:
         up = self.app.uart_path.get().strip().strip('"')
         lp = self.app.logger_path.get().strip().strip('"')
         self.app.config(cursor="watch")
         self.update_idletasks()
+        uart = logger = None
         try:
             try:
-                uart = read_uart_csv(up)
+                uart = read_uart_csv(up) if up else None
             except FileNotFoundError:
                 raise UartFormatError(f"UART CSV が見つかりません:\n{up}")
             except UartFormatError:
@@ -204,7 +210,7 @@ class FileSelectFrame(tk.Frame):
             except Exception as e:  # noqa: BLE001
                 raise UartFormatError(f"UART CSV を読み込めません: {e}")
             try:
-                logger = read_logger_csv(lp)
+                logger = read_logger_csv(lp) if lp else None
             except FileNotFoundError:
                 raise LoggerFormatError(f"ロガー CSV が見つかりません:\n{lp}")
             except LoggerFormatError:
@@ -216,5 +222,7 @@ class FileSelectFrame(tk.Frame):
             return
         finally:
             self.app.config(cursor="")
+        if uart is None and logger is None:
+            return
         self.app.show_adjust(uart, logger)
 

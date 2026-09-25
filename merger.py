@@ -123,10 +123,10 @@ def is_uart_based(uart_interval_ms: float, logger_interval_ms: float) -> bool:
 
 
 def merge(
-    uart: UartData,
-    logger: LoggerData,
-    uart_interval_ms: float,
-    logger_interval_ms: float,
+    uart: UartData | None,
+    logger: LoggerData | None,
+    uart_interval_ms: float | None,
+    logger_interval_ms: float | None,
     timeline: UartTimeline | None = None,
     uart_offset_ms: float = 0.0,
     logger_offset_ms: float = 0.0,
@@ -135,9 +135,26 @@ def merge(
 
     uart_offset_ms / logger_offset_ms：それぞれのデータ全体の時刻をずらす量（ms、＋で遅らせる）。
     UART の各行は tU + uart_offset、ロガーの各行は (番号-1)×間隔 + logger_offset の時刻として扱う。
+
+    どちらか一方（uart か logger）が None なら、もう一方のデータだけの行を作る（片方だけの出力）。
     """
-    if uart_interval_ms <= 0 or logger_interval_ms <= 0:
+    if uart is None and logger is None:
+        raise ValueError("UART とロガーのどちらかのデータが必要です。")
+    if uart is not None and (not uart_interval_ms or uart_interval_ms <= 0):
         raise ValueError("間隔は正の値にしてください。")
+    if logger is not None and (not logger_interval_ms or logger_interval_ms <= 0):
+        raise ValueError("間隔は正の値にしてください。")
+    if logger is None:
+        # UART だけ：欠落補完後の UART の全行
+        if timeline is None:
+            timeline = build_uart_timeline(uart, uart_interval_ms)
+        rows = [MergedRow(t + uart_offset_ms, src, None, src is None) for t, src in zip(timeline.t_ms, timeline.src)]
+        return MergeResult(rows, True, timeline, uart_offset_ms)
+    if uart is None:
+        # ロガーだけ：ロガーの全行（経過時間は (番号-1)×間隔 + オフセット）
+        rows = [MergedRow((num - 1) * logger_interval_ms + logger_offset_ms, None, idx, False)
+                for idx, num in enumerate(logger.numbers)]
+        return MergeResult(rows, False, UartTimeline(), 0.0)
     if timeline is None:
         timeline = build_uart_timeline(uart, uart_interval_ms)
 
@@ -207,18 +224,19 @@ class AnalysisTable:
 
 def build_analysis_table(
     result: MergeResult,
-    uart: UartData,
-    logger: LoggerData,
+    uart: UartData | None,
+    logger: LoggerData | None,
     items: list[ItemSetting],
     elapsed_label: str,
 ) -> AnalysisTable:
-    uart_items = [it for it in items if it.enabled and it.source == SOURCE_UART and it.key in uart.values]
-    logger_items = [it for it in items if it.enabled and it.source == SOURCE_LOGGER and it.key in logger.values]
+    uart_items = [it for it in items if it.enabled and it.source == SOURCE_UART and uart and it.key in uart.values]
+    logger_items = [it for it in items
+                    if it.enabled and it.source == SOURCE_LOGGER and logger and it.key in logger.values]
     # UART 行がない行（欠落補完行など）の elapsed_ms は、直前の実 UART 行から推定する
     tl = result.timeline
     real_t = [t + result.uart_offset_ms for t, s in zip(tl.t_ms, tl.src) if s is not None]
     real_src = [s for s in tl.src if s is not None]
-    has_em = ELAPSED_MS_COLUMN in uart.values
+    has_em = uart is not None and ELAPSED_MS_COLUMN in uart.values
     out = []
     em_raw: list[float | None] = []
     for r in result.rows:
@@ -255,8 +273,9 @@ ROWS_ERROR = "error"
 ANALYSIS_HEADER_ROWS = 6  # 解析シートのデータ開始前の行数
 
 
-def max_sheet_rows(merged_rows: int, uart: UartData, logger: LoggerData) -> int:
-    return max(ANALYSIS_HEADER_ROWS + merged_rows, len(uart.raw_rows), len(logger.raw_rows))
+def max_sheet_rows(merged_rows: int, uart: UartData | None, logger: LoggerData | None) -> int:
+    return max(ANALYSIS_HEADER_ROWS + merged_rows, len(uart.raw_rows) if uart else 0,
+               len(logger.raw_rows) if logger else 0)
 
 
 def check_row_limit(rows: int, warn_threshold: int, limit: int) -> str:

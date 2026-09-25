@@ -21,8 +21,8 @@ class ExportResult:
 def export(
     path: str,
     table: AnalysisTable,
-    uart: UartData,
-    logger: LoggerData,
+    uart: UartData | None,
+    logger: LoggerData | None,
     items: list[ItemSetting],
     graphs: list[GraphSetting],
     elapsed_label: str,
@@ -38,7 +38,10 @@ def export(
     設定の保存に失敗しても出力は成功扱いとし、理由を config_error に入れて返す。
     """
     write_workbook(path, table, uart, logger, graphs, progress=progress)
-    new_cfg = cfgmod.apply_settings(cfg, items, graphs, elapsed_label, uart_dir=uart_dir, logger_dir=logger_dir)
+    new_cfg = cfgmod.apply_settings(
+        cfg, items, graphs, elapsed_label, uart_dir=uart_dir, logger_dir=logger_dir,
+        save_graphs=uart is not None and logger is not None,
+    )
     try:
         cfgmod.save_config(new_cfg, config_path)
         err = None

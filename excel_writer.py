@@ -129,7 +129,8 @@ def needed_time_columns(graphs: list[GraphSetting]) -> set[tuple[str, str]]:
     return {(g.x, g.effective_x_unit()) for g in graphs if g.effective_x_unit()}
 
 
-def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData, progress: ProgressFn | None,
+def _write_analysis(ws, table: AnalysisTable, uart: UartData | None, logger: LoggerData | None,
+                    progress: ProgressFn | None,
                     time_cols: set[tuple[str, str]] = frozenset()) -> tuple[dict, dict]:
     """解析シートを書き、グラフ作成用に (項目キー -> 列番号, 換算列のキー -> 見出し) を返す。
 
@@ -152,28 +153,38 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
         specs.append((it.key, it.label, lambda n, row, i=i: row[1][i]))
         if it.key == "elapsed_ms":
             specs += unit_cols(it.key, it.label, lambda n, row: raw[n] if n < len(raw) else None)
+    logger_specs = [(it.key, it.label, lambda n, row, i=i: row[2][i]) for i, it in enumerate(table.logger_items)]
     extra_labels = {k: lab for k, lab, _ in specs if "@" in k[1:]}
 
-    n_uart_cols = len(specs)
-    logger_start = n_uart_cols + 2  # 1列空ける
-    total_cols = n_uart_cols + (1 + len(table.logger_items) if table.logger_items else 0)
+    # 表のかたまり（ブロック）：(見出し, 列)。ブロックの間は 1 列空ける
+    if uart is None:
+        # ロガーだけ：経過時間の列もロガーの表に入れる
+        block_defs = [("測定値", specs + logger_specs)]
+    else:
+        block_defs = [("マイコン内部データ(UART)", specs)]
+        if logger_specs:
+            block_defs.append(("測定値", logger_specs))
+    layout = []  # (見出し, 開始列, 列の一覧)
+    col = 1
+    for title, cols in block_defs:
+        layout.append((title, col, cols))
+        col += len(cols) + 1
+    total_cols = col - 2
 
     ws.column_dimensions["A"].width = 14
     ws.column_dimensions["B"].width = 20
     for c in range(3, total_cols + 1):
         ws.column_dimensions[get_column_letter(c)].width = 12
 
-    start = uart.timestamps[0].replace(microsecond=0)
-    c_start = WriteOnlyCell(ws, value=start)
+    start = uart.timestamps[0] if uart is not None else (logger.start_time if logger is not None else None)
+    c_start = WriteOnlyCell(ws, value=start.replace(microsecond=0) if start else None)
     c_start.number_format = "yyyy/mm/dd hh:mm:ss"
     ws.append(["測定日時", c_start])
-    ws.append(["測定機", logger.model])
+    ws.append(["測定機", logger.model if logger is not None else "（ロガーなし）"])
     ws.append([])
     ws.append([])
 
-    uart_cols = range(1, n_uart_cols + 1)  # 1始まりの列番号
-    logger_cols = range(logger_start, total_cols + 1) if table.logger_items else range(0)
-    blocks = [uart_cols] + ([logger_cols] if table.logger_items else [])
+    blocks = [range(c0, c0 + len(cols)) for _, c0, cols in layout]
 
     block_of = {c: b for b in blocks for c in b}
     _borders: dict = {}
@@ -202,34 +213,24 @@ def _write_analysis(ws, table: AnalysisTable, uart: UartData, logger: LoggerData
         return c
 
     row5 = [None] * total_cols
-    row5[0] = styled("マイコン内部データ(UART)", 1, font=TITLE_FONT, grid=False)
-    if table.logger_items:
-        row5[logger_start - 1] = styled("測定値", logger_start, font=TITLE_FONT, grid=False)
+    for title, c0, _ in layout:
+        row5[c0 - 1] = styled(title, c0, font=TITLE_FONT, grid=False)
     ws.append(row5)
 
     row6: list = [None] * total_cols
-    labels6 = [lab for _, lab, _ in specs]
-    for i, lab in enumerate(labels6):
-        row6[i] = styled(lab, 1 + i, fill=HEADER_FILL, top=True)
-    for i, it in enumerate(table.logger_items):
-        row6[logger_start - 1 + i] = styled(it.label, logger_start + i, fill=HEADER_FILL, top=True)
+    col_of: dict[str, int] = {}
+    getters: list = [None] * total_cols
+    for _, c0, cols in layout:
+        for k, (key, lab, g) in enumerate(cols):
+            row6[c0 - 1 + k] = styled(lab, c0 + k, fill=HEADER_FILL, top=True)
+            col_of.setdefault(key, c0 + k)
+            getters[c0 - 1 + k] = g
     ws.append(row6)
 
-    col_of: dict[str, int] = {}
-    for i, (k, _, _) in enumerate(specs):
-        col_of[k] = 1 + i
-    for i, it in enumerate(table.logger_items):
-        col_of.setdefault(it.key, logger_start + i)
-
     total = len(table.rows)
-    getters = [g for _, _, g in specs]
     for n, row in enumerate(table.rows):
-        sec, uv, lv, is_gap = row
-        vals: list = [None] * total_cols
-        for i, g in enumerate(getters):
-            vals[i] = g(n, row)
-        for i, v in enumerate(lv):
-            vals[logger_start - 1 + i] = v
+        is_gap = row[3]
+        vals: list = [g(n, row) if g is not None else None for g in getters]
         is_last = n == total - 1
         for idx in range(total_cols):
             col = idx + 1
@@ -354,8 +355,8 @@ def validate_graphs(graphs: list[GraphSetting], items: list[ItemSetting]) -> lis
 def write_workbook(
     path: str,
     table: AnalysisTable,
-    uart: UartData,
-    logger: LoggerData,
+    uart: UartData | None,
+    logger: LoggerData | None,
     graphs: list[GraphSetting],
     progress: ProgressFn | None = None,
 ) -> None:
@@ -379,15 +380,17 @@ def write_workbook(
         ws_g.sheet_properties.tabColor = TAB_COLOR_GRAPH
         _add_charts(ws_g, ws_a, table, graphs, col_of, extra_labels)
 
-    if progress:
-        progress("UART の元データを書き込み中…")
-    ws_u = wb.create_sheet(sanitize_sheet_name(uart.name, used))
-    _write_uart_raw(ws_u, uart)
+    if uart is not None:  # 読み込んだファイルの元データだけシートにする
+        if progress:
+            progress("UART の元データを書き込み中…")
+        ws_u = wb.create_sheet(sanitize_sheet_name(uart.name, used))
+        _write_uart_raw(ws_u, uart)
 
-    if progress:
-        progress("ロガーの元データを書き込み中…")
-    ws_l = wb.create_sheet(sanitize_sheet_name(logger.name, used))
-    _write_logger_raw(ws_l, logger, progress)
+    if logger is not None:
+        if progress:
+            progress("ロガーの元データを書き込み中…")
+        ws_l = wb.create_sheet(sanitize_sheet_name(logger.name, used))
+        _write_logger_raw(ws_l, logger, progress)
 
     if progress:
         progress("ファイルを保存中…")

@@ -33,12 +33,56 @@ def _load(app):
     return app.adjust_frame
 
 
-def test_load_button_disabled_until_both_selected(app):
+def test_load_button_enabled_with_one_file(app):
+    uart = app.uart_path.get()
     app.logger_path.set("")
+    app.update()
+    assert not app.select_frame.load_btn.instate(["disabled"])  # UART だけでも読み込める
+    app.uart_path.set("")
     app.update()
     assert app.select_frame.load_btn.instate(["disabled"])
     app.logger_path.set("x.CSV")
+    app.update()
     assert not app.select_frame.load_btn.instate(["disabled"])
+    app.uart_path.set(uart)
+
+
+@pytest.mark.parametrize("only", ["uart", "logger"])
+def test_single_file_export(app, tmp_path, only):
+    import openpyxl
+
+    (app.logger_path if only == "uart" else app.uart_path).set("")
+    f = _load(app)
+    assert f is not None
+    assert f.validate() == [] and not f.export_btn.instate(["disabled"])
+    if only == "uart":
+        assert f.logger is None and f.logger_int.get() == "―" and f.logger_int_e.instate(["disabled"])
+        assert "UART のみ" in f.mode_line1.cget("text")
+        assert f.filename.get() == "解析_260924-090954.xlsx"
+    else:
+        assert f.uart is None and f.uart_int.get() == "―" and f.uart_off_e.instate(["disabled"])
+        assert "ロガーのみ" in f.mode_line1.cget("text")
+        f.logger_off.set("abc")
+        f.recalc()
+        assert f.export_btn.instate(["disabled"])
+        f.logger_off.set("0")
+        f.recalc()
+    # 描けるグラフが 1 つ以上ある（読み込んでいない方の項目は外れている）
+    assert f.graph_rows and all(g.primary[0] for g in f.graph_rows)
+    f.filename.set("out.xlsx")
+    f.export()
+    for _ in range(200):
+        app.update()
+        if not f._busy:
+            break
+        import time
+
+        time.sleep(0.05)
+    wb = openpyxl.load_workbook(tmp_path / "out.xlsx")
+    assert wb.sheetnames[:2] == ["解析", "グラフ"] and len(wb.sheetnames) == 3
+    for w in app.winfo_children():
+        if isinstance(w, tk.Toplevel):
+            w.destroy()
 
 
 def test_screen2_flow(app, tmp_path):

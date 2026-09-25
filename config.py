@@ -211,8 +211,12 @@ def default_logger_item(ch: str, unit: str, fmt: str) -> ItemSetting:
     return ItemSetting(ch, SOURCE_LOGGER, True, logger_default_label(fmt, ch, unit), 1.0, unit=unit)
 
 
-def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool = True) -> tuple[list[ItemSetting], list[str]]:
-    """画面2の出力項目の初期値を作る。戻り値: (項目一覧, 警告メッセージ)"""
+def build_items(cfg: dict, uart: UartData | None, logger: LoggerData | None,
+                use_saved: bool = True) -> tuple[list[ItemSetting], list[str]]:
+    """画面2の出力項目の初期値を作る。戻り値: (項目一覧, 警告メッセージ)
+
+    uart・logger のどちらかが None（片方だけ読み込んだ）ならその分の項目は作らない。
+    """
     items: list[ItemSetting] = []
     warnings: list[str] = []
     saved_u = cfg.get("uart_columns", {}) if use_saved else {}
@@ -221,7 +225,7 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
     if not use_saved:
         fmt = DEFAULT_CONFIG["logger_label_format"]
 
-    for col in uart.columns:
+    for col in (uart.columns if uart is not None else []):
         s = saved_u.get(col)
         if s:
             items.append(ItemSetting(col, SOURCE_UART, s["enabled"], s["label"], float(s["coef"])))
@@ -229,7 +233,7 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
             items.append(default_uart_item(col))
         items[-1].color = s["color"] if s and is_color(s.get("color")) else default_color(len(items) - 1)
 
-    for ch in logger.channels:
+    for ch in (logger.channels if logger is not None else []):
         s = saved_l.get(ch.name)
         if s:
             items.append(
@@ -246,13 +250,31 @@ def build_items(cfg: dict, uart: UartData, logger: LoggerData, use_saved: bool =
     return items, warnings
 
 
-def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True) -> list[GraphSetting]:
-    """グラフ設定の初期値。今回ない・採用されていない項目は未選択にする。"""
+def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True,
+                 single_source: bool = False) -> list[GraphSetting]:
+    """グラフ設定の初期値。今回ない・採用されていない項目は未選択にする。
+
+    single_source=True（UART かロガーの片方だけ読み込んだ）のときは、読み込んでいない方の項目を
+    エラーにせず外す：縦軸の欄は「なし」、横軸は経過時間(s)。縦軸が 1 つも残らないグラフは作らない。
+    """
     src = cfg.get("graphs", DEFAULT_GRAPHS) if use_saved else DEFAULT_GRAPHS
     enabled = {it.key for it in items if it.enabled}
+    present = {it.key for it in items}
     graphs = []
     for g in src:
         x = g.get("x", DEFAULT_X_KEY)
+        if single_source:
+            keys = [k for k in _clean_keys(g.get("primary")) + _clean_keys(g.get("secondary")) if k in present]
+            if not keys:
+                continue  # このデータでは描けるものがないグラフ
+            g = dict(g)
+            prim = [k for k in _clean_keys(g.get("primary")) if k in present]
+            sec = [k for k in _clean_keys(g.get("secondary")) if k in present]
+            if not prim:  # 第1軸が全部ない → 第2軸の項目を第1軸に
+                prim, sec = sec[:1], sec[1:]
+            g["primary"], g["secondary"] = prim, sec
+            if x != ELAPSED_KEY and x not in present:
+                x = ELAPSED_KEY
         # 「なし」(None) と未選択を区別するため、今回使えないキーは "" にする
         prim = [None if k is None else (k if k in enabled else "") for k in _clean_keys(g.get("primary"))]
         sec = [None if k is None else (k if k in enabled else "") for k in _clean_keys(g.get("secondary"))]
@@ -262,6 +284,12 @@ def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True) ->
         if not g2.primary[0]:
             g2.primary[0] = None  # 第1軸の1つ目は必須：未選択は None
         graphs.append(g2)
+    if single_source and not graphs:
+        # 片方だけのとき、描けるグラフが残らなければ採用中の項目で 1 つ用意する
+        ys = [it.key for it in items if it.enabled and it.key != DEFAULT_X_KEY]
+        if ys:
+            x = DEFAULT_X_KEY if DEFAULT_X_KEY in enabled else ELAPSED_KEY
+            graphs.append(GraphSetting(ys[:1], ys[1:2], x))
     return graphs
 
 
@@ -278,10 +306,12 @@ def apply_settings(
     elapsed: str,
     uart_dir: str | None = None,
     logger_dir: str | None = None,
+    save_graphs: bool = True,
 ) -> dict:
     """出力成功時に保存する内容を cfg に反映した新しい dict を返す。
 
-    今回のCSVにない列・CHの設定は残す。
+    今回のCSVにない列・CHの設定は残す。save_graphs=False（片方だけの出力）のときは
+    両方そろったときのグラフ設定を壊さないよう、グラフ設定は保存しない。
     """
     new = copy.deepcopy(cfg)
     new.setdefault("uart_columns", {})
@@ -293,11 +323,12 @@ def apply_settings(
         else:
             d["unit"] = it.unit
             new["logger_channels"][it.key] = d
-    new["graphs"] = [
-        {"x": g.x, "x_unit": g.x_unit, "primary": [k or None for k in g.primary],
-         "secondary": [k or None for k in g.secondary]}
-        for g in graphs
-    ]
+    if save_graphs:
+        new["graphs"] = [
+            {"x": g.x, "x_unit": g.x_unit, "primary": [k or None for k in g.primary],
+             "secondary": [k or None for k in g.secondary]}
+            for g in graphs
+        ]
     new["elapsed_label"] = elapsed
     new.setdefault("last_dirs", {"uart": "", "logger": ""})
     if uart_dir:
@@ -307,7 +338,9 @@ def apply_settings(
     return new
 
 
-def make_output_filename(cfg: dict, start: datetime) -> str:
+def make_output_filename(cfg: dict, start: datetime | None) -> str:
+    if start is None:  # 開始時刻が分からない（ロガーのみで日時なし等）→ 今の時刻
+        start = datetime.now()
     fmt = cfg.get("output_filename_format") or DEFAULT_CONFIG["output_filename_format"]
     try:
         name = fmt.format(start=start)
