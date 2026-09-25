@@ -9,7 +9,7 @@ GRAPHTEC GL240（データロガー）の CSV と、マイコンから UART 経�
 ## 動作環境
 
 - Windows（Python 3.10 以上。exe 版は Python 不要）
-- ライブラリ：openpyxl、tkinter（Python 標準）、sv-ttk（画面のテーマ）
+- ライブラリ：openpyxl、tkinter（Python 標準）、sv-ttk（画面のテーマ）、tkinterdnd2（ドラッグ＆ドロップ）
 
 ## 使い方
 
@@ -40,6 +40,7 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
 ### 画面1：ファイル選択
 
 1. 「UART CSV」「ロガー CSV」の［参照］でファイルを選ぶ（パスを直接入力しても可）
+   - エクスプローラーから CSV を画面1の枠にドラッグ＆ドロップしても指定できます。枠内に落とすと中身（1行目に `pc_timestamp` があれば UART、GL240 の形式ならロガー）で自動判別し、2つ同時にも落とせます。UART CSV 欄・ロガー CSV 欄の上に落とすとその欄に入ります
 2. ［読み込み］を押す。形式が違う場合は原因を表示して画面1にとどまります
 
 ### 画面2：出力内容の調整
@@ -118,13 +119,18 @@ UTF-8 で保存してください。
 - 今回の CSV にない列・CH の設定は削除されずに残ります（CH 数を一時的に減らした場合など）
 - 間隔・出力先フォルダ・ファイル名は保存されません（毎回 CSV から決まります）
 
+## 困ったとき
+
+画面の操作中に想定外のエラーが起きると、メッセージを表示し、`config.json` と同じフォルダの `error.log` に詳細を記録します。
+不具合の報告の際は `error.log` の内容を添えてください。
+
 ## exe のビルド手順（Windows）
 
 `--onedir` 形式（フォルダ配布）でビルドします。`--onefile` は起動が遅くなるため使いません。
 
 ```
 pip install -r requirements-dev.txt
-pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --name LogMerger main.py
+pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --collect-all tkinterdnd2 --name LogMerger main.py
 ```
 
 （`build.bat` を実行しても同じです）

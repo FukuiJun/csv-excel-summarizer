@@ -26,7 +26,7 @@ jobs:
         run: python -m pytest tests
 
       - name: Build exe (onedir)
-        run: pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --name LogMerger main.py
+        run: pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --collect-all tkinterdnd2 --name LogMerger main.py
 
       # ダウンロードすると LogMerger フォルダ（LogMerger.exe を含む）が入った zip になる
       - name: Upload artifact

@@ -6,3 +6,4 @@ dist/
 *.spec
 config.json
 config.json.tmp
+error.log

@@ -109,11 +109,19 @@ def test_screen2_flow(app, tmp_path):
     import gui
 
     r = rows["voltage_mV"]
-    pal = gui.ColorPalette(r.color_btn, r.color)
-    pal._pick("ff0000")
-    r._set_color(pal.result)
+    r.color_btn.invoke()  # 色見本ボタンを押す
+    app.update()
+    pal = r._palette
+    assert isinstance(pal, gui.ColorPalette) and pal.winfo_exists() and pal.winfo_viewable()
+    r.color_btn.invoke()  # もう一度押しても2つ目は開かない
+    assert r._palette is pal
+    pal._pick("ff0000")  # パレットの色をクリック
+    assert not pal.winfo_exists()
     assert r.to_setting().color == "FF0000"
     assert str(r.color_btn.cget("bg")).lower() == "#ff0000"
+    # 採用を外した項目の色見本は押しても開かない
+    rows["t_ms"].color_btn.invoke()
+    assert rows["t_ms"]._palette is None
 
     # ラベル重複・係数の数値エラー・ファイル名エラー
     rows["cap_mAh"].label.set("電圧(V)")
@@ -166,3 +174,32 @@ def test_label_entry_does_not_stretch_and_page_scrolls(app):
     app.update()
     assert f.page.canvas.yview()[0] > top_before
     assert f.page.canvas.yview()[1] == pytest.approx(1.0)  # 一番下（出力先）まで届く
+
+
+def test_drop_files(app, tmp_path):
+    fs = app.select_frame
+    app.uart_path.set("")
+    app.logger_path.set("")
+    u = write_uart_csv(str(tmp_path / "a.csv"), [0, 1000])
+    lg = write_logger_csv(str(tmp_path / "b.CSV"), 3)
+    # 2つ同時に枠へドロップ → 中身で判別（順番が逆でもよい）
+    fs.set_dropped_files([lg, u])
+    assert app.uart_path.get() == os.path.normpath(u)
+    assert app.logger_path.get() == os.path.normpath(lg)
+    assert not fs.load_btn.instate(["disabled"])
+    # 欄に直接ドロップした場合はその欄に入る
+    fs.set_dropped_files([u], "logger")
+    assert app.logger_path.get() == os.path.normpath(u)
+    # 判別できないファイルは警告
+    import gui
+
+    other = tmp_path / "x.csv"
+    other.write_text("a,b\n", encoding="utf-8")
+    shown = []
+    orig = gui.messagebox.showwarning
+    gui.messagebox.showwarning = lambda *a, **k: shown.append(a)
+    try:
+        fs.set_dropped_files([str(other)])
+    finally:
+        gui.messagebox.showwarning = orig
+    assert shown and "x.csv" in shown[0][1]

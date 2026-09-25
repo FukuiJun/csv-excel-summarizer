@@ -9,6 +9,8 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import traceback
+from datetime import datetime
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
 try:  # 見た目を Windows 11 風にするテーマ（なくても動く）
@@ -16,8 +18,14 @@ try:  # 見た目を Windows 11 風にするテーマ（なくても動く）
 except ImportError:  # pragma: no cover
     sv_ttk = None
 
+try:  # ファイルのドラッグ＆ドロップ（なくても動く）
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except ImportError:  # pragma: no cover
+    DND_FILES = TkinterDnD = None
+
 import config as cfgmod
 import exporter
+from file_detect import KIND_LOGGER, KIND_UART, detect_csv_kind
 from excel_writer import invalid_filename_chars, normalize_filename, validate_graphs
 from logger_reader import LoggerData, LoggerFormatError, read_logger_csv
 from merger import (
@@ -91,6 +99,15 @@ class App(tk.Tk):
         self.bg_color = style.lookup("TFrame", "background") or self.cget("bg")
         self.configure(bg=self.bg_color)
 
+        # ドラッグ＆ドロップ（tkdnd）を使えるようにする。読み込めない環境では D&D なしで動く
+        self.dnd_enabled = False
+        if TkinterDnD is not None:
+            try:
+                TkinterDnD._require(self)
+                self.dnd_enabled = True
+            except Exception:  # noqa: BLE001  pragma: no cover
+                pass
+
         self.config_path = config_path or cfgmod.default_config_path()
         res = cfgmod.load_config(self.config_path)
         self.cfg = res.config
@@ -113,6 +130,18 @@ class App(tk.Tk):
             )
         elif res.message:
             self.after(100, lambda: messagebox.showwarning(APP_TITLE, res.message))
+
+    def report_callback_exception(self, exc, val, tb) -> None:
+        """画面操作中の想定外のエラーを表示し、error.log に記録する（exe ではコンソールが見えないため）。"""
+        text = "".join(traceback.format_exception(exc, val, tb))
+        log_path = os.path.join(os.path.dirname(os.path.abspath(self.config_path)), "error.log")
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"--- {datetime.now():%Y-%m-%d %H:%M:%S}\n{text}\n")
+            where = f"\n\n詳細は {log_path} に記録しました。"
+        except OSError:
+            where = ""
+        messagebox.showerror(APP_TITLE, f"エラーが発生しました。\n{exc.__name__}: {val}{where}", parent=self)
 
     def _define_error_combobox(self) -> None:
         """エラー時のプルダウン（赤枠）のスタイルを sv-ttk の画像で作る。"""
@@ -172,10 +201,51 @@ class FileSelectFrame(ttk.Frame):
         )
         self.load_btn = ttk.Button(box, text="読み込み", command=self.load)
         self.load_btn.grid(row=2, column=2, sticky="e", pady=(12, 0))
+        self.uart_entry, self.logger_entry = box.grid_slaves(row=0, column=1)[0], box.grid_slaves(row=1, column=1)[0]
+
+        if app.dnd_enabled:
+            ttk.Label(
+                box, text="CSV ファイルをこの枠にドラッグ＆ドロップできます（2つ同時も可。中身から UART／ロガーを自動判別）",
+                foreground="#5f5f5f",
+            ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            # 欄の上に落とせばその欄に、それ以外の場所なら中身で自動判別
+            self.uart_entry.drop_target_register(DND_FILES)
+            self.uart_entry.dnd_bind("<<Drop>>", lambda e: self._on_drop(e, KIND_UART))
+            self.logger_entry.drop_target_register(DND_FILES)
+            self.logger_entry.dnd_bind("<<Drop>>", lambda e: self._on_drop(e, KIND_LOGGER))
+            for w in (self, box):
+                w.drop_target_register(DND_FILES)
+                w.dnd_bind("<<Drop>>", lambda e: self._on_drop(e, None))
 
         app.uart_path.trace_add("write", lambda *_: self.update_state())
         app.logger_path.trace_add("write", lambda *_: self.update_state())
         self.update_state()
+
+    def _on_drop(self, event, kind: str | None) -> str:
+        self.set_dropped_files(list(self.tk.splitlist(event.data)), kind)
+        return event.action
+
+    def set_dropped_files(self, paths: list[str], kind: str | None = None) -> None:
+        """ドロップされたファイルを UART／ロガーの欄に設定する。kind が None なら中身から判別する。"""
+        unknown = []
+        for path in paths:
+            path = os.path.normpath(path)
+            k = kind if (kind is not None and len(paths) == 1) else detect_csv_kind(path)
+            if k == KIND_UART:
+                self.app.uart_path.set(path)
+                self.app.dirs["uart"] = os.path.dirname(path)
+            elif k == KIND_LOGGER:
+                self.app.logger_path.set(path)
+                self.app.dirs["logger"] = os.path.dirname(path)
+            else:
+                unknown.append(os.path.basename(path))
+        if unknown:
+            messagebox.showwarning(
+                APP_TITLE,
+                "UART CSV・ロガー CSV のどちらか判別できませんでした：\n" + "\n".join(unknown)
+                + "\n\nUART CSV 欄・ロガー CSV 欄の上に直接ドロップするか、［参照］で選んでください。",
+                parent=self,
+            )
 
     def browse(self, kind: str, var: tk.StringVar) -> None:
         initial = os.path.dirname(var.get()) if var.get() else self.app.dirs.get(kind, "")
@@ -314,6 +384,7 @@ class ItemRow:
         self.color_btn.grid(row=row, column=4, padx=4, pady=1, sticky="w")
         self._set_color(item.color)
         self._on_change = on_change
+        self._palette: ColorPalette | None = None
 
         for v in (self.enabled, self.label, self.coef):
             v.trace_add("write", lambda *_: on_change())
@@ -324,11 +395,16 @@ class ItemRow:
         self.color_btn.configure(bg=c, activebackground=c, disabledforeground=c)
 
     def choose_color(self) -> None:
-        pal = ColorPalette(self.color_btn, self.color)
-        self.color_btn.wait_window(pal)
-        if pal.result:
-            self._set_color(pal.result)
-            self._on_change()
+        if str(self.color_btn.cget("state")) == "disabled":
+            return
+        if self._palette is not None and self._palette.winfo_exists():
+            self._palette.lift()  # 既に開いている
+            return
+        self._palette = ColorPalette(self.color_btn, self.color, on_pick=self._picked)
+
+    def _picked(self, color: str) -> None:
+        self._set_color(color)
+        self._on_change()
 
     def to_setting(self) -> ItemSetting:
         return ItemSetting(
@@ -442,9 +518,11 @@ class ColorPalette(tk.Toplevel):
     THEME = ["FFFFFF", "000000", "E7E6E6", "44546A", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"]
     STANDARD = ["C00000", "FF0000", "FFC000", "FFFF00", "92D050", "00B050", "00B0F0", "0070C0", "002060", "7030A0"]
 
-    def __init__(self, anchor: tk.Widget, current: str):
-        super().__init__(anchor)
+    def __init__(self, anchor: tk.Widget, current: str, on_pick=None):
+        super().__init__(anchor.winfo_toplevel())
         self.result: str | None = None
+        self._on_pick = on_pick
+        self.withdraw()  # 配置が決まるまで隠す
         self.title("色の選択")
         self.resizable(False, False)
         self.transient(anchor.winfo_toplevel())
@@ -461,12 +539,26 @@ class ColorPalette(tk.Toplevel):
         ttk.Button(frm, text="その他の色…", command=self._more).grid(row=10, column=0, columnspan=10, sticky="ew", pady=(10, 0))
 
         self.update_idletasks()
-        x = anchor.winfo_rootx()
+        # 色見本の下に表示（画面からはみ出す場合は内側に寄せる）
+        w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+        x = min(anchor.winfo_rootx(), self.winfo_screenwidth() - w - 8)
         y = anchor.winfo_rooty() + anchor.winfo_height()
-        self.geometry(f"+{x}+{y}")
+        if y + h > self.winfo_screenheight() - 48:
+            y = max(0, anchor.winfo_rooty() - h)
+        self.geometry(f"+{max(0, x)}+{y}")
         self.bind("<Escape>", lambda e: self.destroy())
-        self.grab_set()
-        self.focus_set()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        # 表示されてからほかの操作を止める（表示前に grab すると Windows で失敗することがある）
+        self.after(50, self._grab)
+
+    def _grab(self) -> None:
+        try:
+            if self.winfo_exists():
+                self.grab_set()
+        except tk.TclError:
+            pass
 
     @staticmethod
     def _shade(hex_color: str, f: float) -> str:
@@ -490,6 +582,8 @@ class ColorPalette(tk.Toplevel):
     def _pick(self, color: str) -> None:
         self.result = color.upper()
         self.destroy()
+        if self._on_pick is not None:
+            self._on_pick(self.result)
 
     def _more(self) -> None:
         rgb, hx = colorchooser.askcolor(parent=self, title="その他の色")

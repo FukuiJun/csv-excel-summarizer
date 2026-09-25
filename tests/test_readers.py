@@ -81,3 +81,15 @@ def test_default_uart_interval_jitter(tmp_path):
     times[0] = 0
     u = read_uart_csv(write_uart_csv(str(tmp_path / "u.csv"), times))
     assert default_uart_interval(u.timestamps) == 100
+
+
+def test_detect_csv_kind(tmp_path):
+    from file_detect import KIND_LOGGER, KIND_UART, detect_csv_kind
+
+    assert detect_csv_kind(SAMPLE_UART) == KIND_UART
+    assert detect_csv_kind(SAMPLE_LOGGER) == KIND_LOGGER
+    assert detect_csv_kind(write_logger_csv(str(tmp_path / "l.CSV"), 3)) == KIND_LOGGER
+    other = tmp_path / "other.csv"
+    other.write_text("a,b\n1,2\n", encoding="utf-8")
+    assert detect_csv_kind(str(other)) is None
+    assert detect_csv_kind(str(tmp_path / "none.csv")) is None
