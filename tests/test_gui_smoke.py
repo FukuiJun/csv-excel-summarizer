@@ -217,8 +217,8 @@ def test_screen2_flow(app, tmp_path):
 
 def test_layout_and_separate_scroll(app):
     app.deiconify()
-    app.geometry("960x560")  # 最小サイズ
     f = _load(app)
+    app.geometry("960x560")  # 画面2 の最小サイズ
     app.update()
     # ラベル欄は最大 320px（ウィンドウ幅に合わせて無制限には伸びない）
     assert f.item_rows[0].label_e.winfo_width() <= 330
@@ -423,3 +423,18 @@ def test_add_graph_preselects_axis(app, only):
         f.add_graph()
     app.update()
     assert all(r.primary[0] for r in f.graph_rows) and f.validate() == []
+
+
+def test_window_size_per_screen(app):
+    import design_tokens as T
+
+    th = app.theme
+    small = (th.px(T.WINDOW_SELECT["min_w"]), th.px(T.WINDOW_SELECT["min_h"]))
+    big = (th.px(T.WINDOW["min_w"]), th.px(T.WINDOW["min_h"]))
+    assert app.minsize() == small  # 画面1 は小さめ
+    assert T.WINDOW_SELECT["init_w"] <= T.WINDOW["init_w"] * 0.7
+    _load(app)
+    assert app.minsize() == big  # 画面2 で広げる
+    app.adjust_frame.back_btn.invoke()
+    app.update()
+    assert app.minsize() == small

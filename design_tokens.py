@@ -74,6 +74,8 @@ FONTS = {
 
 # ---------------------------------------------------------------- 寸法（px @100%）
 WINDOW = {"init_w": 1120, "init_h": 720, "min_w": 960, "min_h": 560}
+# 画面1（ファイル選択）は使う部分が少ないので小さめ（画面2 の約 65%）。画面2 に進むと上の大きさに広げる
+WINDOW_SELECT = {"init_w": 720, "init_h": 480, "min_w": 600, "min_h": 440}
 
 SIZE = {
     "header_h": 56, "footer_h": 64, "footer_btnbar_h": 56,  # エラー時はエラー一覧＋56px のボタン行
@@ -87,7 +89,7 @@ SIZE = {
     "table_pad_x": 16,
     "swatch_w": 44, "swatch_h": 24,
     "check": 18,
-    "drop_h": 220, "screen1_content_w": 760, "screen1_top_pad": 40,
+    "drop_h": 160, "screen1_content_w": 620, "screen1_top_pad": 24,
     "graph_block_pad": (12, 16), "graph_block_gap": 12, "graph_label_w": 150,
     "palette_swatch": 22, "palette_gap": 4,
 }

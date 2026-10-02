@@ -139,7 +139,6 @@ class App(tk.Tk):
         super().__init__()
         self.title(window_title(APP_TITLE))
         self.icon_set = set_window_icon(self)
-        w = T.WINDOW
 
         self.config_path = config_path or cfgmod.default_config_path()
         res = cfgmod.load_config(self.config_path)
@@ -149,8 +148,8 @@ class App(tk.Tk):
 
         self.theme = Theme(self, resolve_theme(self.cfg.get("theme")))
         th = self.theme
-        self.geometry(f"{th.px(w['init_w'])}x{th.px(w['init_h'])}")
-        self.minsize(th.px(w["min_w"]), th.px(w["min_h"]))
+        self._placed = False
+        self.fit_window(T.WINDOW_SELECT)
 
         # ドラッグ＆ドロップ（tkdnd）を使えるようにする。読み込めない環境では D&D なしで動く
         self.dnd_enabled = False
@@ -223,15 +222,43 @@ class App(tk.Tk):
             self.adjust_frame.destroy()
             self.adjust_frame = None
         self.select_frame.pack(fill="both", expand=True)
+        self.fit_window(T.WINDOW_SELECT)
         self.set_step(1, "設定は前回の値を引き継ぎます")
 
     def show_adjust(self, uart: UartData | None, logger: LoggerData | None) -> None:
         self.select_frame.pack_forget()
         self.adjust_frame = AdjustFrame(self, uart, logger)
         self.adjust_frame.pack(fill="both", expand=True)
+        self.fit_window(T.WINDOW)
         names = [os.path.basename(d.path) for d in (uart, logger) if d is not None]
         note = " ＋ ".join(names) + ("（UART のみ）" if logger is None else "（ロガーのみ）" if uart is None else "")
         self.set_step(2, note)
+
+    def fit_window(self, size: dict) -> None:
+        """画面に合わせてウィンドウの大きさを変える（画面1 は小さめ、画面2 は広め）。
+
+        中心の位置はそのまま。最大化しているときは最小サイズだけ変える。
+        """
+        th = self.theme
+        self.minsize(th.px(size["min_w"]), th.px(size["min_h"]))
+        w, h = th.px(size["init_w"]), th.px(size["init_h"])
+        if not self._placed:  # 起動時：大きさだけ指定（位置はウィンドウマネージャ任せ）
+            self._placed = True
+            self.geometry(f"{w}x{h}")
+            return
+        try:
+            if self.state() == "zoomed":
+                return
+        except tk.TclError:
+            pass
+        self.update_idletasks()
+        cx = self.winfo_x() + self.winfo_width() // 2
+        cy = self.winfo_y() + self.winfo_height() // 2
+        x, y = cx - w // 2, max(0, cy - h // 2)  # タイトルバーが画面の上にはみ出さないように
+        sw = self.winfo_screenwidth()
+        if 0 <= cx < sw:  # メインのモニター上なら左右もはみ出さないように
+            x = min(max(0, x), max(0, sw - w))
+        self.geometry(f"{w}x{h}{x:+d}{y:+d}")
 
     def set_theme(self, name: str) -> None:
         """テーマを切り替える（tk 系部品の色もまとめて塗り直す）。"""

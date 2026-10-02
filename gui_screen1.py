@@ -22,7 +22,7 @@ CSV_TYPES = [("CSV ファイル", "*.csv *.CSV"), ("すべてのファイル", "
 
 
 class DropZone(tk.Canvas):
-    """破線の枠のドロップ領域（高さ 220）。ドラッグ中は accent の実線にする。"""
+    """破線の枠のドロップ領域（高さ 160）。ドラッグ中は accent の実線にする。"""
 
     def __init__(self, parent, th):
         super().__init__(parent, height=th.size("drop_h"), highlightthickness=0, bd=0)
@@ -69,7 +69,7 @@ class FileSelectFrame(tk.Frame):
         th.paint(self, bg="bg")
         self.app = app
 
-        # ---- 本体：幅 760 の列を中央寄せ ----
+        # ---- 本体：幅 620 の列を中央寄せ ----
         body = frame(self, th, "bg")
         body.pack(fill="both", expand=True)
         col = frame(body, th, "bg")
@@ -80,7 +80,7 @@ class FileSelectFrame(tk.Frame):
         self.drop.pack(fill="x")
 
         rows = frame(col, th, "bg")
-        rows.pack(fill="x", pady=(th.px(24), 0))
+        rows.pack(fill="x", pady=(th.px(20), 0))
         rows.columnconfigure(2, weight=1)
         for c, w in ((0, 28), (1, 132), (3, 88)):
             rows.columnconfigure(c, minsize=th.px(w))
