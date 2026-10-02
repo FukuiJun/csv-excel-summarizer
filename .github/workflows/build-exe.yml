@@ -25,24 +25,38 @@ jobs:
       - name: Test
         run: python -m pytest tests
 
-      - name: Build exe (onedir)
-        run: pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --collect-all tkinterdnd2 --icon assets/LogMerger.ico --add-data "assets;assets" --name LogMerger main.py
+      # バージョン：タグのビルドはタグ名（例 v1.2.0）、それ以外は dev-<コミット7桁>
+      - name: Decide version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" }
+          else { $v = "dev-" + "${{ github.sha }}".Substring(0, 7) }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          python tools/write_version.py $v
 
-      # ダウンロードすると LogMerger フォルダ（LogMerger.exe を含む）が入った zip になる
+      - name: Build exe (onedir)
+        run: pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --collect-all tkinterdnd2 --icon assets/LogMerger.ico --add-data "assets;assets" --hidden-import _version --name LogMerger main.py
+
+      # 配布フォルダにバージョンのメモ（VERSION.txt）を置く
+      - name: Write VERSION.txt
+        run: python tools/write_version.py ${{ steps.ver.outputs.version }} dist/LogMerger
+
+      # ダウンロードすると LogMerger-<バージョン>.zip（中に LogMerger フォルダ）になる
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LogMerger
+          name: LogMerger-${{ steps.ver.outputs.version }}
           path: dist/
           if-no-files-found: error
 
       - name: Zip for release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
-        run: Compress-Archive -Path dist\LogMerger -DestinationPath LogMerger.zip
+        run: Compress-Archive -Path dist\LogMerger -DestinationPath LogMerger-${{ steps.ver.outputs.version }}.zip
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: LogMerger.zip
+          files: LogMerger-${{ steps.ver.outputs.version }}.zip

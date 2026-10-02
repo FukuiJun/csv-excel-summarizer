@@ -7,3 +7,4 @@ dist/
 config.json
 config.json.tmp
 error.log
+_version.py

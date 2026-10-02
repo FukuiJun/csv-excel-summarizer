@@ -31,10 +31,14 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
 1. **GitHub Actions でビルドされたものをダウンロード**（おすすめ）
    1. GitHub のリポジトリページで **Actions** タブを開く
    2. 左の一覧から **Build exe** を選び、緑のチェック（成功）が付いた最新の実行を開く
-   3. ページ下部の **Artifacts** にある **LogMerger** をクリックしてダウンロード（GitHub へのログインが必要。保存期間は 90 日）
+   3. ページ下部の **Artifacts** にある **LogMerger-dev-xxxxxxx**（xxxxxxx はコミット番号）をクリックしてダウンロード（GitHub へのログインが必要。保存期間は 90 日）
    4. zip を展開し、`LogMerger\LogMerger.exe` を実行
-2. **Releases からダウンロード**：`v1.0.0` のようなタグを push すると、Releases に `LogMerger.zip` が添付されます
+2. **Releases からダウンロード**：`v1.2.0` のようなタグを付けると、Releases に `LogMerger-v1.2.0.zip` のようにバージョン付きの zip が添付されます
 3. **自分の PC でビルド**：Python をインストールした PC で `build.bat` を実行すると `dist\LogMerger\LogMerger.exe` ができます（下記「exe のビルド手順」）
+
+**バージョンの確認**：zip のファイル名、展開した `LogMerger` フォルダ内の `VERSION.txt`（バージョン・ビルド日時・コミット）、
+アプリのタイトルバー（例「ロガーCSV・UART CSV 統合ツール v1.2.0」）で分かります。バージョンはタグ名から自動で付きます
+（タグのないビルドは `dev-<コミット>`、`python main.py` で動かしたときは「開発版」）。
 
 ※ 署名のない exe のため、初回起動時に Windows の SmartScreen 警告が出ることがあります。その場合は「詳細情報」→「実行」を押してください。
 
@@ -171,7 +175,8 @@ pyinstaller --noconfirm --clean --onedir --windowed --collect-data sv_ttk --coll
 （`build.bat` を実行しても同じです）
 
 GitHub に push すると、GitHub Actions（`.github/workflows/build-exe.yml`）が Windows 上でテストと exe のビルドを自動で行い、
-結果を Artifacts（`LogMerger`）としてアップロードします。タグ `v*` を push したときは Releases にも `LogMerger.zip` を添付します。
+結果を Artifacts（`LogMerger-<バージョン>`）としてアップロードします。タグ `v*` を付けたときは Releases にも `LogMerger-<タグ名>.zip` を添付します。
+バージョンのメモ `VERSION.txt` と exe 内のバージョン（`_version.py`）は `tools/write_version.py` が作ります。
 
 `dist\LogMerger\` フォルダができるので、フォルダごと配布してください。
 `config.json` は初回起動時に `LogMerger.exe` と同じフォルダに作られます。

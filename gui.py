@@ -18,6 +18,7 @@ from tkinter import messagebox
 
 import config as cfgmod
 import design_tokens as T
+from version import window_title
 from gui_dialogs import (
     APP_TITLE,
     ColorPalette,
@@ -136,7 +137,7 @@ def set_window_icon(root: tk.Tk) -> bool:
 class App(tk.Tk):
     def __init__(self, config_path: str | None = None):
         super().__init__()
-        self.title(APP_TITLE)
+        self.title(window_title(APP_TITLE))
         self.icon_set = set_window_icon(self)
         w = T.WINDOW
 
