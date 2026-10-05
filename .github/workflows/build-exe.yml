@@ -42,7 +42,12 @@ jobs:
       - name: Write VERSION.txt
         run: python tools/write_version.py ${{ steps.ver.outputs.version }} dist/LogMerger
 
-      # ダウンロードすると LogMerger-<バージョン>.zip（中に LogMerger フォルダ）になる
+      # 配布フォルダ名にもバージョンを付ける（展開すると LogMerger-v1.2.0\LogMerger.exe）
+      - name: Rename folder
+        shell: pwsh
+        run: Rename-Item dist\LogMerger "LogMerger-${{ steps.ver.outputs.version }}"
+
+      # ダウンロードすると LogMerger-<バージョン>.zip（中に LogMerger-<バージョン> フォルダ）になる
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,7 +58,7 @@ jobs:
       - name: Zip for release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
-        run: Compress-Archive -Path dist\LogMerger -DestinationPath LogMerger-${{ steps.ver.outputs.version }}.zip
+        run: Compress-Archive -Path "dist\LogMerger-${{ steps.ver.outputs.version }}" -DestinationPath LogMerger-${{ steps.ver.outputs.version }}.zip
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')

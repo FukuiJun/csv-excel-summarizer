@@ -16,7 +16,7 @@ UART・ロガーの**どちらか片方だけ**でも Excel にできます。
 
 ### 起動
 
-- exe 版：`LogMerger\LogMerger.exe` をダブルクリック（exe の入手方法は下記）
+- exe 版：`LogMerger-v1.2.0\LogMerger.exe`（フォルダ名はバージョンにより異なる）をダブルクリック（exe の入手方法は下記）
 - Python 版：
   ```
   pip install -r requirements.txt
@@ -32,11 +32,11 @@ exe はリポジトリには含まれていません（GitHub の「Code → Dow
    1. GitHub のリポジトリページで **Actions** タブを開く
    2. 左の一覧から **Build exe** を選び、緑のチェック（成功）が付いた最新の実行を開く
    3. ページ下部の **Artifacts** にある **LogMerger-dev-xxxxxxx**（xxxxxxx はコミット番号）をクリックしてダウンロード（GitHub へのログインが必要。保存期間は 90 日）
-   4. zip を展開し、`LogMerger\LogMerger.exe` を実行
+   4. zip を展開し、`LogMerger-<バージョン>\LogMerger.exe` を実行
 2. **Releases からダウンロード**：`v1.2.0` のようなタグを付けると、Releases に `LogMerger-v1.2.0.zip` のようにバージョン付きの zip が添付されます
 3. **自分の PC でビルド**：Python をインストールした PC で `build.bat` を実行すると `dist\LogMerger\LogMerger.exe` ができます（下記「exe のビルド手順」）
 
-**バージョンの確認**：zip のファイル名、展開した `LogMerger` フォルダ内の `VERSION.txt`（バージョン・ビルド日時・コミット）、
+**バージョンの確認**：zip のファイル名・展開したフォルダ名（`LogMerger-v1.2.0` など）、フォルダ内の `VERSION.txt`（バージョン・ビルド日時・コミット）、
 アプリのタイトルバー（例「ロガーCSV・UART CSV 統合ツール v1.2.0」）で分かります。バージョンはタグ名から自動で付きます
 （タグのないビルドは `dev-<コミット>`、`python main.py` で動かしたときは「開発版」）。
 
@@ -182,6 +182,7 @@ GitHub に push すると、GitHub Actions（`.github/workflows/build-exe.yml`�
 
 `dist\LogMerger\` フォルダができるので、フォルダごと配布してください。
 `config.json` は初回起動時に `LogMerger.exe` と同じフォルダに作られます。
+新しいバージョンのフォルダ（例 `LogMerger-v1.3.0`）を旧バージョンのフォルダと同じ場所に置いて初めて起動すると、旧バージョンのフォルダ（`LogMerger*`）の中で一番新しい `config.json` を自動でコピーして設定を引き継ぎます。
 あらかじめ調整した `config.json` を同じフォルダに入れて配布することもできます。
 
 ## 開発

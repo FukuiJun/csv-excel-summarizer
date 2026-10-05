@@ -141,6 +141,8 @@ class App(tk.Tk):
         self.icon_set = set_window_icon(self)
 
         self.config_path = config_path or cfgmod.default_config_path()
+        if config_path is None:  # 新しいバージョンのフォルダなら、前のバージョンの設定を引き継ぐ
+            cfgmod.migrate_previous_config(self.config_path)
         res = cfgmod.load_config(self.config_path)
         self.cfg = res.config
         # 「参照」ダイアログの初期フォルダ（出力成功時に config.json へ保存）

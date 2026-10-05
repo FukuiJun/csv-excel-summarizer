@@ -288,3 +288,30 @@ def test_build_graphs_single_source_and_keep_saved_graphs(tmp_path):
     new = cfgmod.apply_settings(cfg, items, graphs, "経過時間(s)", save_graphs=False)
     assert new["graphs"] == cfg["graphs"]
     assert cfgmod.make_output_filename(cfg, None).endswith(".xlsx")
+
+
+def test_migrate_previous_config(tmp_path):
+    import time
+
+    old1 = tmp_path / "LogMerger"
+    old2 = tmp_path / "LogMerger-v1.2.0"
+    other = tmp_path / "MemoGenerator-v1.4.0"
+    new = tmp_path / "LogMerger-v1.3.0"
+    for d in (old1, old2, other, new):
+        d.mkdir()
+    (old1 / "config.json").write_text('{"elapsed_label": "old"}', encoding="utf-8")
+    time.sleep(0.02)
+    (old2 / "config.json").write_text('{"elapsed_label": "newer"}', encoding="utf-8")
+    time.sleep(0.02)
+    (other / "config.json").write_text('{"elapsed_label": "other app"}', encoding="utf-8")
+    path = str(new / "config.json")
+    assert cfgmod.migrate_previous_config(path) == str(old2 / "config.json")
+    assert cfgmod.load_config(path).config["elapsed_label"] == "newer"
+    # すでにあるときは何もしない
+    assert cfgmod.migrate_previous_config(path) is None
+
+
+def test_migrate_previous_config_none(tmp_path):
+    d = tmp_path / "LogMerger-v1.3.0"
+    d.mkdir()
+    assert cfgmod.migrate_previous_config(str(d / "config.json")) is None

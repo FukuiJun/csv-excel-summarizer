@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -67,6 +68,41 @@ def app_dir() -> str:
 
 def default_config_path() -> str:
     return os.path.join(app_dir(), CONFIG_FILENAME)
+
+
+def migrate_previous_config(path: str) -> str | None:
+    """新しいバージョンのフォルダに config.json がなければ、隣の旧バージョンのフォルダから引き継ぐ。
+
+    配布フォルダはバージョンごとに LogMerger-v1.2.0 のような名前になるため、同じ親フォルダにある
+    LogMerger* フォルダの config.json のうち一番新しいものをコピーする。コピー元のパスを返す。
+    """
+    if os.path.exists(path):
+        return None
+    here = os.path.dirname(os.path.abspath(path))
+    parent = os.path.dirname(here)
+    best = None
+    try:
+        names = os.listdir(parent)
+    except OSError:
+        return None
+    for name in names:
+        d = os.path.join(parent, name)
+        if not name.lower().startswith("logmerger") or os.path.normcase(d) == os.path.normcase(here):
+            continue
+        cand = os.path.join(d, CONFIG_FILENAME)
+        try:
+            mtime = os.path.getmtime(cand)
+        except OSError:
+            continue
+        if best is None or mtime > best[0]:
+            best = (mtime, cand)
+    if best is None:
+        return None
+    try:
+        shutil.copy2(best[1], path)
+    except OSError:
+        return None
+    return best[1]
 
 
 # ---------------------------------------------------------------------------
