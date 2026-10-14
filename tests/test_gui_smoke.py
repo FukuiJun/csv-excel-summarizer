@@ -438,3 +438,21 @@ def test_window_size_per_screen(app):
     app.adjust_frame.back_btn.invoke()
     app.update()
     assert app.minsize() == small
+
+
+@pytest.mark.parametrize("minutes, expect", [(1, "ms"), (12, "min")])
+def test_auto_min_for_long_measurement(app, tmp_path, minutes, expect):
+    # ロガーのみ：1 秒間隔で minutes 分
+    app.uart_path.set("")
+    app.logger_path.set(write_logger_csv(str(tmp_path / "long.CSV"), minutes * 60 + 1, interval="1s"))
+    f = _load(app)
+    assert f.graph_rows[0].x_unit.get() == ("s" if expect == "ms" else "min")  # ロガーのみの横軸は経過時間(s)
+    f.add_graph()
+    assert f.graph_rows[-1].x_unit.get() == ("s" if expect == "ms" else "min")
+
+
+def test_auto_min_both_files(app, tmp_path):
+    app.uart_path.set(write_uart_csv(str(tmp_path / "u2.csv"), [i * 60_000 for i in range(16)]))  # 15 分
+    f = _load(app)
+    g = f.graph_rows[0]
+    assert g.x == "elapsed_ms" and g.x_unit.get() == "min" and f.validate() == []

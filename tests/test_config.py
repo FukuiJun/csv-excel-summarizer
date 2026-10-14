@@ -315,3 +315,20 @@ def test_migrate_previous_config_none(tmp_path):
     d = tmp_path / "LogMerger-v1.3.0"
     d.mkdir()
     assert cfgmod.migrate_previous_config(str(d / "config.json")) is None
+
+
+def test_auto_time_unit(tmp_path):
+    cfg = cfgmod.default_config()
+    u = read_uart_csv(write_uart_csv(str(tmp_path / "u.csv"), [i * 60_000 for i in range(11)]))  # 10 分
+    lg = read_logger_csv(write_logger_csv(str(tmp_path / "l.CSV"), 60))  # 11.8 秒
+    assert cfgmod.measurement_ms(u, lg) == pytest.approx(600_000)
+    assert cfgmod.measurement_ms(None, lg) == pytest.approx(59 * 200)
+    assert cfgmod.auto_time_unit(cfg, 600_000) == "min"
+    assert cfgmod.auto_time_unit(cfg, 599_000) is None
+    assert cfgmod.auto_time_unit({**cfg, "auto_min_minutes": 0}, 10**9) is None  # 0 で自動選択しない
+    graphs = [GraphSetting(["a"], [None], "elapsed_ms", None), GraphSetting(["a"], [None], ELAPSED_KEY, "s"),
+              GraphSetting(["a"], [None], "voltage_mV", None)]
+    cfgmod.apply_auto_time_unit(graphs, "min")
+    assert [g.x_unit for g in graphs] == ["min", "min", None]  # 時間以外の横軸は変えない
+    cfgmod.apply_auto_time_unit(graphs, None)
+    assert [g.effective_x_unit() for g in graphs] == [None, None, None]

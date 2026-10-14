@@ -16,6 +16,7 @@ from models import (
     ELAPSED_KEY,
     SOURCE_LOGGER,
     SOURCE_UART,
+    TIME_KEYS,
     TIME_UNITS,
     GraphSetting,
     ItemSetting,
@@ -52,6 +53,8 @@ DEFAULT_CONFIG: dict = {
     "row_limit": 1_000_000,
     "theme": "auto",  # auto（Windows の設定に追従）/ light / dark
     "offset_section_open": True,  # 画面2「間隔・時間オフセット」の開閉状態
+    # 測定時間がこの分数以上なら、時間の横軸の単位を自動で min にする（0 で自動選択しない）
+    "auto_min_minutes": 10,
 }
 
 
@@ -183,6 +186,8 @@ def _normalize(raw: dict) -> dict:
         cfg["theme"] = raw["theme"]
     if isinstance(raw.get("offset_section_open"), bool):
         cfg["offset_section_open"] = raw["offset_section_open"]
+    if _is_num(raw.get("auto_min_minutes")) and raw["auto_min_minutes"] >= 0:
+        cfg["auto_min_minutes"] = raw["auto_min_minutes"]
     for key in ("row_warn_threshold", "row_limit"):
         if _is_num(raw.get(key)) and raw[key] > 0:
             cfg[key] = int(raw[key])
@@ -329,6 +334,31 @@ def build_graphs(cfg: dict, items: list[ItemSetting], use_saved: bool = True,
             x = DEFAULT_X_KEY if DEFAULT_X_KEY in enabled else ELAPSED_KEY
             graphs.append(GraphSetting(ys[:1], ys[1:2], x))
     return graphs
+
+
+def measurement_ms(uart: UartData | None, logger: LoggerData | None) -> float:
+    """測定時間（ms）。UART は先頭〜最後の pc_timestamp、ロガーは (行数 − 1) × 間隔。長い方。"""
+    spans = [0.0]
+    if uart is not None and uart.timestamps:
+        spans.append((uart.timestamps[-1] - uart.timestamps[0]).total_seconds() * 1000)
+    if logger is not None and logger.interval_ms and logger.numbers:
+        spans.append((max(logger.numbers) - min(logger.numbers)) * logger.interval_ms)
+    return max(spans)
+
+
+def auto_time_unit(cfg: dict, duration_ms: float) -> str | None:
+    """測定時間に合う横軸の単位。長い（auto_min_minutes 分以上）なら "min"、それ以外は None（元の単位）。"""
+    minutes = cfg.get("auto_min_minutes", DEFAULT_CONFIG["auto_min_minutes"])
+    if minutes and duration_ms >= minutes * 60_000:
+        return "min"
+    return None
+
+
+def apply_auto_time_unit(graphs: list[GraphSetting], unit: str | None) -> None:
+    """横軸が時間（elapsed_ms・経過時間(s)）のグラフの単位を、測定時間から決めた単位にそろえる。"""
+    for g in graphs:
+        if TIME_KEYS.get(g.x or ""):
+            g.x_unit = unit
 
 
 def elapsed_label(cfg: dict, use_saved: bool = True) -> str:

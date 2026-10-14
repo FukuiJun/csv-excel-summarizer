@@ -308,7 +308,8 @@ class GraphRow:
             if i >= 0:
                 self.values[n] = self._keys[n][i]
         if self.x != old_x and TIME_KEYS.get(self.x or "") and TIME_KEYS.get(old_x or "") is None:
-            self.x_unit.set(TIME_KEYS[self.x])  # 時間以外 → 時間の項目に変えたときは元の単位から
+            # 時間以外 → 時間の項目に変えたときは、測定時間から決めた単位（なければ元の単位）から
+            self.x_unit.set(self.frame.auto_unit or TIME_KEYS[self.x])
         self._update_unit_state()
         self.frame.validate()
 
@@ -350,6 +351,9 @@ class AdjustFrame(tk.Frame):
         self.unit_changed = {w.split(" ", 1)[0] for w in self.unit_warnings}
         self.single = uart is None or logger is None
         graphs = cfgmod.build_graphs(app.cfg, items, single_source=self.single)
+        # 測定時間が長いときは時間の横軸を min にしておく（短いときは元の単位）
+        self.auto_unit = cfgmod.auto_time_unit(app.cfg, cfgmod.measurement_ms(uart, logger))
+        cfgmod.apply_auto_time_unit(graphs, self.auto_unit)
         self.elapsed_var = tk.StringVar(value=cfgmod.elapsed_label(app.cfg))
 
         self._build_footer()
@@ -772,7 +776,7 @@ class AdjustFrame(tk.Frame):
         cands = [k for k in keys if k != x]
         used = {k for g in self.graph_rows for k in g.to_setting().series_keys()}
         first = next((k for k in cands if k not in used), cands[0] if cands else None)
-        return GraphSetting([first], [None], x)
+        return GraphSetting([first], [None], x, self.auto_unit)
 
     def remove_graph(self, g: GraphRow) -> None:
         g.destroy()
@@ -1127,6 +1131,7 @@ class AdjustFrame(tk.Frame):
             return
         items, _ = cfgmod.build_items(self.app.cfg, self.uart, self.logger, use_saved=False)
         graphs = cfgmod.build_graphs(self.app.cfg, items, use_saved=False, single_source=self.single)
+        cfgmod.apply_auto_time_unit(graphs, self.auto_unit)
         self.elapsed_var.set(cfgmod.elapsed_label(self.app.cfg, use_saved=False))
         self.set_items(items, graphs)
 
